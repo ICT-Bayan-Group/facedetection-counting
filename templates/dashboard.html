@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>People Counter Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .animate-fade-in {
+        animation: fadeIn 0.6s ease-out forwards;
+      }
+      .delay-100 {
+        animation-delay: 0.1s;
+        opacity: 0;
+      }
+      .delay-200 {
+        animation-delay: 0.2s;
+        opacity: 0;
+      }
+      .delay-300 {
+        animation-delay: 0.3s;
+        opacity: 0;
+      }
+      .delay-400 {
+        animation-delay: 0.4s;
+        opacity: 0;
+      }
+
+      .stat-card {
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        transition: all 0.3s ease;
+      }
+      .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+      }
+
+      .pulse-dot {
+        animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.4;
+        }
+      }
+    </style>
+  </head>
+  <body class="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-white/80 backdrop-blur-lg border-b border-gray-200/50 sticky top-0 z-50">
+      <div class="max-w-7xl mx-auto px-6 lg:px-8 py-5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-4">
+            <img src="https://res.cloudinary.com/dwyi4d3rq/image/upload/v1765779007/BAYAN_R_-_BAWAH_xs3qyv.png" alt="Logo" class="h-14 w-14 object-contain" />
+            <div>
+              <h1 class="text-2xl font-bold text-gray-900">Face Detection</h1>
+              <p class="text-sm text-gray-500">Real-time Dashboard Monitoring</p>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 px-4 py-2 bg-emerald-50 rounded-full border border-emerald-200">
+              <span class="w-2 h-2 bg-emerald-500 rounded-full pulse-dot"></span>
+              <span class="text-sm font-medium text-emerald-700">Live</span>
+            </div>
+            <button onclick="location.reload()" class="w-10 h-10 flex items-center justify-center hover:bg-gray-100 rounded-xl transition">
+              <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-6 lg:px-8 py-8">
+      <!-- Stats Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <!-- Current People -->
+        <div class="stat-card rounded-3xl p-6 border border-gray-200/50 shadow-lg shadow-gray-200/50 animate-fade-in">
+          <div class="flex items-center justify-between mb-4">
+            <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30">
+              <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+              </svg>
+            </div>
+            <span class="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">+0%</span>
+          </div>
+          <h3 class="text-sm font-medium text-gray-600 mb-1">Current People</h3>
+          <p class="text-3xl font-bold text-gray-900" id="currentCount">0</p>
+          <p class="text-xs text-gray-500 mt-2">In frame now</p>
+        </div>
+
+        <!-- Max Today -->
+        <div class="stat-card rounded-3xl p-6 border border-gray-200/50 shadow-lg shadow-gray-200/50 animate-fade-in delay-100">
+          <div class="flex items-center justify-between mb-4">
+            <div class="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
+              <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <span class="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">+20%</span>
+          </div>
+          <h3 class="text-sm font-medium text-gray-600 mb-1">Max Today</h3>
+          <p class="text-3xl font-bold text-gray-900" id="maxCount">0</p>
+          <p class="text-xs text-gray-500 mt-2">Peak capacity</p>
+        </div>
+
+        <!-- Total Unique -->
+        <div class="stat-card rounded-3xl p-6 border border-gray-200/50 shadow-lg shadow-gray-200/50 animate-fade-in delay-200">
+          <div class="flex items-center justify-between mb-4">
+            <div class="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-lg shadow-violet-500/30">
+              <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"
+                />
+              </svg>
+            </div>
+            <span class="px-3 py-1 bg-violet-100 text-violet-700 text-xs font-semibold rounded-full">+20%</span>
+          </div>
+          <h3 class="text-sm font-medium text-gray-600 mb-1">Total Unique</h3>
+          <p class="text-3xl font-bold text-gray-900" id="dailyTotal">0</p>
+          <p class="text-xs text-gray-500 mt-2">People detected</p>
+        </div>
+
+        <!-- Performance -->
+        <div class="stat-card rounded-3xl p-6 border border-gray-200/50 shadow-lg shadow-gray-200/50 animate-fade-in delay-300">
+          <div class="flex items-center justify-between mb-4">
+            <div class="w-12 h-12 bg-gradient-to-br from-orange-500 to-amber-500 rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/30">
+              <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <span class="px-3 py-1 bg-orange-100 text-orange-700 text-xs font-semibold rounded-full">+3.85%</span>
+          </div>
+          <h3 class="text-sm font-medium text-gray-600 mb-1">Performance</h3>
+          <p class="text-3xl font-bold text-gray-900"><span id="fps">0</span> <span class="text-lg text-gray-500">FPS</span></p>
+          <p class="text-xs text-gray-500 mt-2">Frames per second</p>
+        </div>
+      </div>
+
+      <!-- Main Content Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+        <!-- Video Feed -->
+        <div class="lg:col-span-2 animate-fade-in delay-400">
+          <div class="stat-card rounded-3xl overflow-hidden border border-gray-200/50 shadow-lg shadow-gray-200/50">
+            <div class="bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800 px-6 py-4 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
+                  <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
+                  </svg>
+                </div>
+                <h2 class="text-lg font-semibold text-white">Live Camera Feed</h2>
+              </div>
+              <span id="connectionStatus" class="text-xs text-gray-400">Connecting...</span>
+            </div>
+            <div class="relative bg-gradient-to-br from-slate-900 to-slate-800">
+              <img id="videoFeed" src="/video_feed" alt="CCTV Feed" class="w-full h-auto" />
+              <div class="absolute bottom-4 right-4 bg-black/80 backdrop-blur-sm px-4 py-2 rounded-xl border border-white/10">
+                <p class="text-white text-sm font-mono" id="liveTime">--:--:--</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hourly Activity Chart -->
+        <div class="animate-fade-in delay-400">
+          <div class="stat-card rounded-3xl p-6 border border-gray-200/50 shadow-lg shadow-gray-200/50 h-full">
+            <div class="flex items-center justify-between mb-6">
+              <div>
+                <h2 class="text-lg font-bold text-gray-900">Hourly Activity</h2>
+                <p class="text-xs text-gray-500 mt-1">Last 24 hours</p>
+              </div>
+            </div>
+            <canvas id="hourlyChart" class="w-full"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Section -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Peak Hours -->
+        <div class="stat-card rounded-3xl p-6 border border-gray-200/50 shadow-lg shadow-gray-200/50 animate-fade-in">
+          <div class="flex items-center justify-between mb-6">
+            <div>
+              <h2 class="text-lg font-bold text-gray-900">Peak Hours</h2>
+              <p class="text-xs text-gray-500 mt-1">Top 5 busiest times</p>
+            </div>
+          </div>
+          <div id="peakHoursList" class="space-y-3">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Control Panel -->
+        <div class="stat-card rounded-3xl p-6 border border-gray-200/50 shadow-lg shadow-gray-200/50 animate-fade-in">
+          <div class="flex items-center justify-between mb-6">
+            <div>
+              <h2 class="text-lg font-bold text-gray-900">Control Panel</h2>
+              <p class="text-xs text-gray-500 mt-1" id="lastUpdate">Last update: --:--:--</p>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <button
+              onclick="resetStats()"
+              class="w-full bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-semibold py-4 px-6 rounded-2xl shadow-lg shadow-red-500/30 hover:shadow-xl hover:shadow-red-500/40 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
+            >
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fill-rule="evenodd"
+                  d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+              Reset Daily Stats
+            </button>
+
+            <button
+              onclick="exportData()"
+              class="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold py-4 px-6 rounded-2xl shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
+            >
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fill-rule="evenodd"
+                  d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+              Export Data
+            </button>
+
+            <button
+              onclick="checkHealth()"
+              class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold py-4 px-6 rounded-2xl shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
+            >
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+              </svg>
+              Check System Health
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      let hourlyChart, statsInterval;
+
+      function initChart() {
+        const ctx = document.getElementById("hourlyChart").getContext("2d");
+        hourlyChart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`),
+            datasets: [
+              {
+                label: "People Count",
+                data: Array(24).fill(0),
+                backgroundColor: "rgba(99, 102, 241, 0.1)",
+                borderColor: "rgb(99, 102, 241)",
+                borderWidth: 3,
+                tension: 0.4,
+                fill: true,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                pointBackgroundColor: "rgb(99, 102, 241)",
+                pointBorderColor: "#fff",
+                pointBorderWidth: 2,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: "#1e293b",
+                padding: 12,
+                cornerRadius: 12,
+                titleFont: { size: 13, weight: "600" },
+                bodyFont: { size: 12 },
+              },
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: { color: "#64748b", font: { size: 11 } },
+                grid: { color: "#f1f5f9" },
+              },
+              x: {
+                ticks: { color: "#64748b", font: { size: 9 } },
+                grid: { display: false },
+              },
+            },
+          },
+        });
+      }
+
+      function updateStats() {
+        fetch("/api/stats")
+          .then((r) => r.json())
+          .then((data) => {
+            document.getElementById("currentCount").textContent = data.current_count;
+            document.getElementById("maxCount").textContent = data.max_count;
+            document.getElementById("dailyTotal").textContent = data.daily_total;
+            document.getElementById("fps").textContent = data.fps;
+
+            const time = new Date(data.timestamp);
+            document.getElementById("liveTime").textContent = time.toLocaleTimeString();
+            document.getElementById("lastUpdate").textContent = `Last update: ${time.toLocaleTimeString()}`;
+
+            const hourlyData = Array(24).fill(0);
+            Object.entries(data.hourly_stats).forEach(([hour, count]) => {
+              hourlyData[parseInt(hour)] = count;
+            });
+            hourlyChart.data.datasets[0].data = hourlyData;
+            hourlyChart.update("none");
+
+            document.getElementById("connectionStatus").textContent = "Connected";
+          })
+          .catch((err) => {
+            console.error("Error:", err);
+            document.getElementById("connectionStatus").textContent = "Connection Error";
+          });
+
+        fetch("/api/history")
+          .then((r) => r.json())
+          .then((data) => updatePeakHours(data.peak_hours))
+          .catch((err) => console.error("Error:", err));
+      }
+
+      function updatePeakHours(peakHours) {
+        const container = document.getElementById("peakHoursList");
+        if (!peakHours || peakHours.length === 0) {
+          container.innerHTML = '<p class="text-gray-500 text-sm text-center py-8">No data available</p>';
+          return;
+        }
+
+        const gradients = ["from-blue-500 to-cyan-500", "from-emerald-500 to-teal-500", "from-violet-500 to-purple-500", "from-orange-500 to-amber-500", "from-rose-500 to-pink-500"];
+
+        container.innerHTML = peakHours
+          .map(
+            (item, i) => `
+        <div class="flex items-center justify-between p-4 bg-gradient-to-r ${gradients[i]} rounded-2xl text-white shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center font-bold">
+              ${i + 1}
+            </div>
+            <div>
+              <p class="font-semibold text-lg">${String(item.hour).padStart(2, "0")}:00</p>
+              <p class="text-xs opacity-90">Peak time</p>
+            </div>
+          </div>
+          <div class="text-right">
+            <p class="text-3xl font-bold">${item.count}</p>
+            <p class="text-xs opacity-90">people</p>
+          </div>
+        </div>
+      `
+          )
+          .join("");
+      }
+
+      function resetStats() {
+        if (confirm("Are you sure you want to reset daily statistics?")) {
+          fetch("/api/reset", { method: "POST" })
+            .then((r) => r.json())
+            .then((data) => {
+              alert("✅ " + data.message);
+              updateStats();
+            })
+            .catch(() => alert("❌ Error resetting stats"));
+        }
+      }
+
+      function exportData() {
+        fetch("/api/stats")
+          .then((r) => r.json())
+          .then((data) => {
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `people-counter-${new Date().toISOString().split("T")[0]}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+          })
+          .catch(() => alert("❌ Error exporting data"));
+      }
+
+      function checkHealth() {
+        fetch("/api/health")
+          .then((r) => r.json())
+          .then((data) => {
+            const status = data.cctv_connected ? "✅ CCTV Connected" : "⚠️ CCTV Disconnected";
+            alert(`System Status: ${data.status}\n${status}\nService: ${data.service}`);
+          })
+          .catch(() => alert("❌ Error checking health"));
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        initChart();
+        updateStats();
+        statsInterval = setInterval(updateStats, 1000);
+      });
+
+      window.addEventListener("beforeunload", () => {
+        if (statsInterval) clearInterval(statsInterval);
+      });
+    </script>
+  </body>
+</html>
