@@ -1,11 +1,11 @@
 # People Counter — CCTV Face Detection & Counting
 
-![Python](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQCTdlxpN40oRq28d7owUaaoj4y37IjSn5RNA&s)
-![Flask](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQOL9HihGRlCubXlGV_FBX6B6y-pK2KAx6O4Q&s)
-![OpenCV](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQfRklXyWQy1ditXPl8oBPdbcdjxuiVU3Z3VA&s)
-![YOLOv8](https://miro.medium.com/v2/resize:fit:1200/1*YQWYPi4uoT8RcG6BPbUoVw.png)
-![Tailwind CSS](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQNhoXisDruJMDAq3Ltd-wuaMW2lGxck9wAKw&s)
-![Chart.js](https://miro.medium.com/v2/1*W3-xgZUKr4ruD1FNL-xaMQ.png)
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-3.0.0-000000?style=for-the-badge&logo=flask&logoColor=white)
+![OpenCV](https://img.shields.io/badge/OpenCV-4.8-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white)
+![YOLOv8](https://img.shields.io/badge/YOLOv8-Ultralytics-00FFFF?style=for-the-badge&logo=yolo&logoColor=black)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.0-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
+![Chart.js](https://img.shields.io/badge/Chart.js-3.9-FF6384?style=for-the-badge&logo=chartdotjs&logoColor=white)
 
 ## Ringkasan singkat
 
