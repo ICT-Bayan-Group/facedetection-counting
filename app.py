@@ -10,8 +10,26 @@ import logging
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 os.environ['YOLO_VERBOSE'] = 'False'
+
+# Suppress OpenCV/FFmpeg errors
+os.environ['OPENCV_LOG_LEVEL'] = 'FATAL'
+os.environ['OPENCV_VIDEOIO_DEBUG'] = '0'
+os.environ['OPENCV_FFMPEG_LOGLEVEL'] = '-8'  # Quiet mode
+
 import warnings
 warnings.filterwarnings('ignore')
+
+# Redirect stderr to suppress FFmpeg errors
+if sys.platform == 'win32':
+    # Windows
+    try:
+        sys.stderr = open(os.devnull, 'w')
+    except:
+        pass
+else:
+    # Linux/Mac
+    import contextlib
+    sys.stderr = open(os.devnull, 'w')
 
 # Import modules
 from core.people_counter import PeopleCounter
