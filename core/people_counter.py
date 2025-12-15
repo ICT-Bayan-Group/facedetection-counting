@@ -14,6 +14,12 @@ import os
 from core.config import Config
 from utils.video_utils import VideoStreamHandler
 from utils.stats_manager import StatisticsManager
+import sys
+import logging
+
+# Suppress OpenCV warnings
+logging.getLogger('libav').setLevel(logging.ERROR)
+logging.getLogger('h264').setLevel(logging.ERROR)
 
 class PeopleCounter:
     def __init__(self, cctv_urls, user, password):
@@ -73,6 +79,9 @@ class PeopleCounter:
     
     def detection_loop(self):
         """Main detection loop"""
+        failed_reads = 0
+        max_failed_reads = 5
+        
         while self.is_running:
             try:
                 start_time = time.time()
@@ -85,15 +94,36 @@ class PeopleCounter:
                 
                 ret, frame = self.cap.read()
                 
-                if not ret:
-                    print("⚠️  Frame read failed, reconnecting...")
+                if not ret or frame is None:
+                    failed_reads += 1
+                    
+                    # Skip corrupt frame, don't reconnect immediately
+                    if failed_reads < max_failed_reads:
+                        # Clear buffer by reading multiple frames
+                        for _ in range(3):
+                            self.cap.grab()
+                        continue
+                    
+                    # Reconnect only after multiple consecutive failures
+                    print("⚠️  Multiple frame read failures, reconnecting...")
                     self.cap.release()
-                    time.sleep(2)
+                    time.sleep(1)
                     self.cap = self.video_handler.connect()
+                    failed_reads = 0
+                    continue
+                
+                # Reset failed reads counter on successful read
+                failed_reads = 0
+                
+                # Validate frame
+                if frame.size == 0 or frame.shape[0] == 0 or frame.shape[1] == 0:
                     continue
                 
                 # Process frame
-                frame = cv2.resize(frame, (Config.FRAME_WIDTH, Config.FRAME_HEIGHT))
+                try:
+                    frame = cv2.resize(frame, (Config.FRAME_WIDTH, Config.FRAME_HEIGHT))
+                except:
+                    continue
                 
                 # Run YOLO detection
                 results = self.model.track(
