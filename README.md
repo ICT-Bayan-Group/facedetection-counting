@@ -1,11 +1,11 @@
 # People Counter — CCTV Face Detection & Counting
 
-![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)
-![Flask](https://img.shields.io/badge/Flask-3.0.0-black?logo=flask&logoColor=white)
-![OpenCV](https://img.shields.io/badge/OpenCV-4.8-blue?logo=opencv&logoColor=white)
-![YOLOv8](https://img.shields.io/badge/YOLOv8-Ultralytics-orange?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PHBhdGggZD0iTTI0IDBhMjQgMjQgMCAxIDAgMCA0OCAyNCAyNCAwIDAgMCAwLTQ4eiIgZmlsbD0iI2ZmYTQwMCIvPjwvc3ZnPg==)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.0-06B6D4?logo=tailwindcss&logoColor=white)
-![Chart.js](https://img.shields.io/badge/Chart.js-3.9-FF6384?logo=chartdotjs&logoColor=white)
+![Python](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQCTdlxpN40oRq28d7owUaaoj4y37IjSn5RNA&s)
+![Flask](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQOL9HihGRlCubXlGV_FBX6B6y-pK2KAx6O4Q&s)
+![OpenCV](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQfRklXyWQy1ditXPl8oBPdbcdjxuiVU3Z3VA&s)
+![YOLOv8](https://miro.medium.com/v2/resize:fit:1200/1*YQWYPi4uoT8RcG6BPbUoVw.png)
+![Tailwind CSS](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQNhoXisDruJMDAq3Ltd-wuaMW2lGxck9wAKw&s)
+![Chart.js](https://miro.medium.com/v2/1*W3-xgZUKr4ruD1FNL-xaMQ.png)
 
 ## Ringkasan singkat
 
