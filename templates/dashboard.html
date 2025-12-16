@@ -99,7 +99,7 @@
                 <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
               </svg>
             </div>
-            <span class="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">+0%</span>
+            <span class="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full" id="currentChange">+0%</span>
           </div>
           <h3 class="text-sm font-medium text-gray-600 mb-1">Current People</h3>
           <p class="text-3xl font-bold text-gray-900" id="currentCount">0</p>
@@ -114,7 +114,7 @@
                 <path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd" />
               </svg>
             </div>
-            <span class="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">+20%</span>
+            <span class="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">Peak</span>
           </div>
           <h3 class="text-sm font-medium text-gray-600 mb-1">Max Today</h3>
           <p class="text-3xl font-bold text-gray-900" id="maxCount">0</p>
@@ -131,7 +131,7 @@
                 />
               </svg>
             </div>
-            <span class="px-3 py-1 bg-violet-100 text-violet-700 text-xs font-semibold rounded-full">+20%</span>
+            <span class="px-3 py-1 bg-violet-100 text-violet-700 text-xs font-semibold rounded-full">Total</span>
           </div>
           <h3 class="text-sm font-medium text-gray-600 mb-1">Total Unique</h3>
           <p class="text-3xl font-bold text-gray-900" id="dailyTotal">0</p>
@@ -146,7 +146,7 @@
                 <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd" />
               </svg>
             </div>
-            <span class="px-3 py-1 bg-orange-100 text-orange-700 text-xs font-semibold rounded-full">+3.85%</span>
+            <span class="px-3 py-1 bg-orange-100 text-orange-700 text-xs font-semibold rounded-full">Real-time</span>
           </div>
           <h3 class="text-sm font-medium text-gray-600 mb-1">Performance</h3>
           <p class="text-3xl font-bold text-gray-900"><span id="fps">0</span> <span class="text-lg text-gray-500">FPS</span></p>
@@ -168,10 +168,10 @@
                 </div>
                 <h2 class="text-lg font-semibold text-white">Live Camera Feed</h2>
               </div>
-              <span id="connectionStatus" class="text-xs text-gray-400">Connecting...</span>
+              <span id="connectionStatus" class="text-xs text-emerald-400 font-medium">● Connected</span>
             </div>
             <div class="relative bg-gradient-to-br from-slate-900 to-slate-800">
-              <img id="videoFeed" src="/video_feed" alt="CCTV Feed" class="w-full h-auto" />
+              <img id="videoFeed" src="/video_feed" alt="CCTV Feed" class="w-full h-auto" onerror="handleStreamError()" onload="handleStreamLoad()" />
               <div class="absolute bottom-4 right-4 bg-black/80 backdrop-blur-sm px-4 py-2 rounded-xl border border-white/10">
                 <p class="text-white text-sm font-mono" id="liveTime">--:--:--</p>
               </div>
@@ -204,7 +204,7 @@
             </div>
           </div>
           <div id="peakHoursList" class="space-y-3">
-            <!-- Populated by JS -->
+            <p class="text-gray-500 text-sm text-center py-8">Loading peak hours...</p>
           </div>
         </div>
 
@@ -262,6 +262,7 @@
 
     <script>
       let hourlyChart, statsInterval;
+      let previousCount = 0;
 
       function initChart() {
         const ctx = document.getElementById("hourlyChart").getContext("2d");
@@ -318,33 +319,54 @@
         fetch("/api/stats")
           .then((r) => r.json())
           .then((data) => {
-            document.getElementById("currentCount").textContent = data.current_count;
-            document.getElementById("maxCount").textContent = data.max_count;
-            document.getElementById("dailyTotal").textContent = data.daily_total;
-            document.getElementById("fps").textContent = data.fps;
+            const currentCount = data.current_count || 0;
+            document.getElementById("currentCount").textContent = currentCount;
+            document.getElementById("maxCount").textContent = data.max_count || 0;
+            document.getElementById("dailyTotal").textContent = data.daily_total || 0;
+            document.getElementById("fps").textContent = (data.fps || 0).toFixed(1);
 
-            const time = new Date(data.timestamp);
+            // Calculate percentage change
+            if (previousCount !== 0) {
+              const change = (((currentCount - previousCount) / previousCount) * 100).toFixed(0);
+              const changeEl = document.getElementById("currentChange");
+              if (change > 0) {
+                changeEl.textContent = `+${change}%`;
+                changeEl.className = "px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full";
+              } else if (change < 0) {
+                changeEl.textContent = `${change}%`;
+                changeEl.className = "px-3 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded-full";
+              } else {
+                changeEl.textContent = "0%";
+                changeEl.className = "px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full";
+              }
+            }
+            previousCount = currentCount;
+
+            const time = new Date(data.timestamp || Date.now());
             document.getElementById("liveTime").textContent = time.toLocaleTimeString();
             document.getElementById("lastUpdate").textContent = `Last update: ${time.toLocaleTimeString()}`;
 
+            // Update hourly chart
             const hourlyData = Array(24).fill(0);
-            Object.entries(data.hourly_stats).forEach(([hour, count]) => {
-              hourlyData[parseInt(hour)] = count;
-            });
+            if (data.hourly_stats) {
+              Object.entries(data.hourly_stats).forEach(([hour, count]) => {
+                hourlyData[parseInt(hour)] = count;
+              });
+            }
             hourlyChart.data.datasets[0].data = hourlyData;
             hourlyChart.update("none");
-
-            document.getElementById("connectionStatus").textContent = "Connected";
           })
           .catch((err) => {
-            console.error("Error:", err);
-            document.getElementById("connectionStatus").textContent = "Connection Error";
+            console.error("Error fetching stats:", err);
+            document.getElementById("connectionStatus").textContent = "● Error";
+            document.getElementById("connectionStatus").className = "text-xs text-red-400 font-medium";
           });
 
+        // Update peak hours
         fetch("/api/history")
           .then((r) => r.json())
-          .then((data) => updatePeakHours(data.peak_hours))
-          .catch((err) => console.error("Error:", err));
+          .then((data) => updatePeakHours(data.peak_hours || []))
+          .catch((err) => console.error("Error fetching history:", err));
       }
 
       function updatePeakHours(peakHours) {
@@ -411,17 +433,39 @@
           .then((r) => r.json())
           .then((data) => {
             const status = data.cctv_connected ? "✅ CCTV Connected" : "⚠️ CCTV Disconnected";
-            alert(`System Status: ${data.status}\n${status}\nService: ${data.service}`);
+            const deviceInfo = data.device ? `\nDevice: ${data.device.toUpperCase()}` : "";
+            const fpsInfo = data.fps ? `\nDisplay FPS: ${data.fps}` : "";
+            const processFps = data.processing_fps ? `\nProcessing FPS: ${data.processing_fps}` : "";
+            alert(`System Status: ${data.status.toUpperCase()}\n${status}\nService: ${data.service}${deviceInfo}${fpsInfo}${processFps}`);
           })
           .catch(() => alert("❌ Error checking health"));
       }
 
+      function handleStreamError() {
+        console.error("Stream connection failed");
+        document.getElementById("connectionStatus").textContent = "● Reconnecting...";
+        document.getElementById("connectionStatus").className = "text-xs text-yellow-400 font-medium";
+
+        // Try to reload stream after 2 seconds
+        setTimeout(() => {
+          const img = document.getElementById("videoFeed");
+          img.src = "/video_feed?" + new Date().getTime();
+        }, 2000);
+      }
+
+      function handleStreamLoad() {
+        document.getElementById("connectionStatus").textContent = "● Connected";
+        document.getElementById("connectionStatus").className = "text-xs text-emerald-400 font-medium";
+      }
+
+      // Initialize on page load
       document.addEventListener("DOMContentLoaded", () => {
         initChart();
         updateStats();
-        statsInterval = setInterval(updateStats, 1000);
+        statsInterval = setInterval(updateStats, 1000); // Update every second for real-time feel
       });
 
+      // Cleanup on page unload
       window.addEventListener("beforeunload", () => {
         if (statsInterval) clearInterval(statsInterval);
       });
