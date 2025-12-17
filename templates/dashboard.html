@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>People Counter Dashboard</title>
+    <title>Face Counter Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -91,19 +91,19 @@
     <main class="max-w-7xl mx-auto px-6 lg:px-8 py-8">
       <!-- Stats Grid -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <!-- Current People -->
+        <!-- Current Faces -->
         <div class="stat-card rounded-3xl p-6 border border-gray-200/50 shadow-lg shadow-gray-200/50 animate-fade-in">
           <div class="flex items-center justify-between mb-4">
             <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30">
               <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
               </svg>
             </div>
             <span class="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full" id="currentChange">+0%</span>
           </div>
-          <h3 class="text-sm font-medium text-gray-600 mb-1">Current People</h3>
+          <h3 class="text-sm font-medium text-gray-600 mb-1">Current Faces</h3>
           <p class="text-3xl font-bold text-gray-900" id="currentCount">0</p>
-          <p class="text-xs text-gray-500 mt-2">In frame now</p>
+          <p class="text-xs text-gray-500 mt-2">Detected in frame</p>
         </div>
 
         <!-- Max Today -->
@@ -118,7 +118,7 @@
           </div>
           <h3 class="text-sm font-medium text-gray-600 mb-1">Max Today</h3>
           <p class="text-3xl font-bold text-gray-900" id="maxCount">0</p>
-          <p class="text-xs text-gray-500 mt-2">Peak capacity</p>
+          <p class="text-xs text-gray-500 mt-2">Peak detected</p>
         </div>
 
         <!-- Total Unique -->
@@ -135,7 +135,7 @@
           </div>
           <h3 class="text-sm font-medium text-gray-600 mb-1">Total Unique</h3>
           <p class="text-3xl font-bold text-gray-900" id="dailyTotal">0</p>
-          <p class="text-xs text-gray-500 mt-2">People detected</p>
+          <p class="text-xs text-gray-500 mt-2">Unique faces</p>
         </div>
 
         <!-- Performance -->
@@ -166,7 +166,7 @@
                     <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
                   </svg>
                 </div>
-                <h2 class="text-lg font-semibold text-white">Live Camera Feed</h2>
+                <h2 class="text-lg font-semibold text-white">Live Face Detection Feed</h2>
               </div>
               <span id="connectionStatus" class="text-xs text-emerald-400 font-medium">● Connected</span>
             </div>
@@ -272,7 +272,7 @@
             labels: Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`),
             datasets: [
               {
-                label: "People Count",
+                label: "Face Count",
                 data: Array(24).fill(0),
                 backgroundColor: "rgba(99, 102, 241, 0.1)",
                 borderColor: "rgb(99, 102, 241)",
@@ -354,6 +354,7 @@
               });
             }
             hourlyChart.data.datasets[0].data = hourlyData;
+            hourlyChart.data.datasets[0].label = "Face Count";
             hourlyChart.update("none");
           })
           .catch((err) => {
@@ -393,7 +394,7 @@
           </div>
           <div class="text-right">
             <p class="text-3xl font-bold">${item.count}</p>
-            <p class="text-xs opacity-90">people</p>
+            <p class="text-xs opacity-90">faces</p>
           </div>
         </div>
       `
@@ -421,7 +422,7 @@
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
-            link.download = `people-counter-${new Date().toISOString().split("T")[0]}.json`;
+            link.download = `face-counter-${new Date().toISOString().split("T")[0]}.json`;
             link.click();
             URL.revokeObjectURL(url);
           })
@@ -433,10 +434,11 @@
           .then((r) => r.json())
           .then((data) => {
             const status = data.cctv_connected ? "✅ CCTV Connected" : "⚠️ CCTV Disconnected";
-            const deviceInfo = data.device ? `\nDevice: ${data.device.toUpperCase()}` : "";
+            const modelInfo = data.model ? `\nModel: ${data.model}` : "";
             const fpsInfo = data.fps ? `\nDisplay FPS: ${data.fps}` : "";
             const processFps = data.processing_fps ? `\nProcessing FPS: ${data.processing_fps}` : "";
-            alert(`System Status: ${data.status.toUpperCase()}\n${status}\nService: ${data.service}${deviceInfo}${fpsInfo}${processFps}`);
+            const trackers = data.active_trackers ? `\nActive Trackers: ${data.active_trackers}` : "";
+            alert(`System Status: ${data.status.toUpperCase()}\n${status}\nService: ${data.service}${modelInfo}${fpsInfo}${processFps}${trackers}`);
           })
           .catch(() => alert("❌ Error checking health"));
       }
