@@ -1,5 +1,5 @@
 """
-Statistics management utilities
+Statistics management utilities for Face Counter
 """
 import pickle
 import os
@@ -9,18 +9,18 @@ from datetime import datetime, timedelta
 from core.config import Config
 
 class StatisticsManager:
-    """Manages statistics and historical data"""
+    """Manages face detection statistics and historical data"""
     
     def __init__(self):
-        self.people_count = 0
+        self.people_count = 0  # Current faces in frame
         self.max_count = 0
-        self.total_detected = 0
+        self.total_detected = 0  # Total unique faces
         self.hourly_stats = defaultdict(int)
         self.daily_history = []
         self.entry_times = []
     
     def update(self, current_count):
-        """Update current statistics"""
+        """Update current face count statistics"""
         self.people_count = current_count
         
         if self.people_count > self.max_count:
@@ -35,7 +35,7 @@ class StatisticsManager:
             )
     
     def add_unique_person(self):
-        """Increment unique person counter"""
+        """Increment unique face counter"""
         self.total_detected += 1
         self.entry_times.append(datetime.now())
     
@@ -68,7 +68,7 @@ class StatisticsManager:
         }
     
     def _get_entry_distribution(self):
-        """Get entry time distribution"""
+        """Get face detection time distribution"""
         if not self.entry_times:
             return {}
         
@@ -129,6 +129,6 @@ class StatisticsManager:
                         datetime.fromisoformat(t) for t in entry_times_iso
                     ]
                     
-                    print(f"✅ Statistics loaded - {self.total_detected} unique people recorded")
+                    print(f"✅ Statistics loaded - {self.total_detected} unique faces recorded")
         except Exception as e:
             print(f"⚠️  Could not load statistics: {e}")
