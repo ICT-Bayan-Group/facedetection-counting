@@ -1,7 +1,7 @@
 """
-Core modules for People Counter System
+Core modules for Face Counter System
 """
 from .config import Config
-from .people_counter import PeopleCounter
+from .people_counter import FaceCounter
 
-__all__ = ['Config', 'PeopleCounter']
+__all__ = ['Config', 'FaceCounter']

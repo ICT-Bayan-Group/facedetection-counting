@@ -1,10 +1,11 @@
 """
-Enhanced Configuration for Optimized Performance
+Enhanced Configuration for Face Counter - Optimized Performance
 """
 import os
+import cv2
 
 class Config:
-    """Application configuration with performance optimizations"""
+    """Application configuration for face detection with performance optimizations"""
     
     # CCTV Settings
     CCTV_IP = "10.2.22.15"
@@ -14,8 +15,8 @@ class Config:
     # Optimized CCTV URL Options (ordered by performance)
     CCTV_URLS = [
         # Try TCP first for better reliability
-        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}:554/stream2?tcp",
-        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}:554/stream1?tcp",
+        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}/streaming/channels/101",
+        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}/streaming/channels/101",
         # Then UDP for lower latency
         f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}:554/stream2",
         f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}:554/stream1",
@@ -31,16 +32,27 @@ class Config:
     DEBUG = False
     THREADED = True
     
-    # Enhanced Detection Settings
-    YOLO_MODEL = 'yolov8n.pt'  # Nano model - fastest
-    # Use 'yolov8s.pt' for better accuracy or 'yolov8m.pt' for best accuracy
+    # Face Detection Settings
+    # Haar Cascade settings
+    HAAR_SCALE_FACTOR = 1.1  # Smaller = more accurate but slower
+    HAAR_MIN_NEIGHBORS = 6  # Higher = fewer false positives (increased)
+    HAAR_MIN_SIZE = (50, 50)  # Minimum face size (increased)
+    HAAR_MAX_SIZE = (400, 400)  # Maximum face size (prevent false positives)
     
-    CONFIDENCE_THRESHOLD = 0.45  # Lower for better detection
-    MIN_TRACKING_CONFIDENCE = 0.4  # Minimum to keep tracking
-    NEW_ID_CONFIDENCE = 0.5  # Higher threshold for new person
+    # Validation Settings
+    ENABLE_EYE_VALIDATION = True  # Require eyes to be detected
+    ENABLE_SKIN_VALIDATION = True  # Check for skin-like colors
+    ENABLE_TEXTURE_VALIDATION = True  # Check texture variance
+    QUALITY_THRESHOLD = 0.5  # Minimum quality score (0.0 - 1.0)
+    MIN_CHECKS_PASSED = 0.4  # Minimum 40% of validation checks must pass
     
-    IOU_THRESHOLD = 0.4  # Lower for better separation
-    TRACKER = "bytetrack.yaml"  # Fast and accurate tracker
+    # DNN Face Detection settings (if using DNN model)
+    CONFIDENCE_THRESHOLD = 0.5  # Confidence threshold for DNN
+    DNN_INPUT_SIZE = (300, 300)  # Input size for DNN
+    
+    # Tracking Settings
+    MAX_TRACKING_DISTANCE = 100  # Maximum distance to consider same face
+    FACE_TIMEOUT = 1.0  # Seconds before face ID expires
     
     # Frame Settings - Optimized for real-time
     FRAME_WIDTH = 1280  # HD resolution
@@ -57,8 +69,8 @@ class Config:
     FPS_WINDOW_SIZE = 20  # Responsive FPS calculation
     
     # Storage Settings
-    STATS_FILE = 'data/people_counter_stats.pkl'
-    HISTORY_FILE = 'data/people_history.pkl'
+    STATS_FILE = 'data/face_counter_stats.pkl'
+    HISTORY_FILE = 'data/face_history.pkl'
     
     # Network Settings for RTSP
     RTSP_TRANSPORT = 'tcp'  # tcp or udp (tcp more reliable, udp lower latency)
@@ -66,9 +78,9 @@ class Config:
     RECONNECT_DELAY = 2  # seconds
     MAX_RECONNECT_ATTEMPTS = 3
     
-    # GPU Settings
-    USE_GPU = True  # Enable GPU acceleration if available
-    USE_FP16 = True  # Use half precision on GPU for 2x speed
+    # DNN Model Paths (optional - for better accuracy)
+    DNN_PROTO = "deploy.prototxt"
+    DNN_MODEL = "res10_300x300_ssd_iter_140000_fp16.caffemodel"
     
     @staticmethod
     def init_directories():
@@ -87,6 +99,37 @@ class Config:
             cv2.CAP_PROP_FRAME_WIDTH: Config.FRAME_WIDTH,
             cv2.CAP_PROP_FRAME_HEIGHT: Config.FRAME_HEIGHT
         }
-
-# Import cv2 for settings
-import cv2
+    
+    @staticmethod
+    def download_dnn_models():
+        """
+        Download DNN models for better face detection accuracy
+        Run this once to download the models
+        """
+        import urllib.request
+        
+        proto_url = "https://raw.githubusercontent.com/opencv/opencv/master/samples/dnn/face_detector/deploy.prototxt"
+        model_url = "https://github.com/opencv/opencv_3rdparty/raw/dnn_samples_face_detector_20170830/res10_300x300_ssd_iter_140000.caffemodel"
+        
+        print("Downloading DNN face detection models...")
+        
+        try:
+            if not os.path.exists(Config.DNN_PROTO):
+                print(f"Downloading {Config.DNN_PROTO}...")
+                urllib.request.urlretrieve(proto_url, Config.DNN_PROTO)
+                print("✅ Proto file downloaded")
+            
+            if not os.path.exists(Config.DNN_MODEL):
+                print(f"Downloading {Config.DNN_MODEL} (this may take a while)...")
+                urllib.request.urlretrieve(model_url, Config.DNN_MODEL)
+                print("✅ Model file downloaded")
+            
+            print("✅ All DNN models ready!")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error downloading models: {e}")
+            print("💡 Tip: You can manually download from:")
+            print(f"   Proto: {proto_url}")
+            print(f"   Model: {model_url}")
+            return False

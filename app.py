@@ -1,5 +1,5 @@
 """
-Optimized Flask Application - Compatible with Original Frontend
+Optimized Flask Application for Face Counter - Compatible with Frontend
 """
 from flask import Flask, render_template, Response, jsonify
 from flask_cors import CORS
@@ -12,7 +12,6 @@ import logging
 # Disable verbose logging
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
-os.environ['YOLO_VERBOSE'] = 'False'
 
 # Suppress OpenCV/FFmpeg errors
 os.environ['OPENCV_LOG_LEVEL'] = 'FATAL'
@@ -31,8 +30,8 @@ if sys.platform == 'win32':
 else:
     sys.stderr = open(os.devnull, 'w')
 
-# Import modules
-from core.people_counter import PeopleCounter
+# Import modules - CHANGED: Import FaceCounter instead of PeopleCounter
+from core.people_counter import FaceCounter
 from core.config import Config
 
 app = Flask(__name__)
@@ -42,14 +41,14 @@ CORS(app)
 counter = None
 
 def get_counter():
-    """Get or initialize counter"""
+    """Get or initialize face counter"""
     global counter
     if counter is None:
-        counter = PeopleCounter(Config.CCTV_URLS, Config.CCTV_USER, Config.CCTV_PASS)
+        counter = FaceCounter(Config.CCTV_URLS, Config.CCTV_USER, Config.CCTV_PASS)
         counter.start()
     return counter
 
-# ==================== ROUTES - COMPATIBLE WITH ORIGINAL FRONTEND ====================
+# ==================== ROUTES - COMPATIBLE WITH FRONTEND ====================
 
 @app.route('/')
 def index():
@@ -77,8 +76,9 @@ def video_feed():
                     continue
                 
                 # Optimized JPEG encoding
+                jpeg_quality = getattr(Config, 'JPEG_QUALITY', 80)
                 encode_params = [
-                    int(cv2.IMWRITE_JPEG_QUALITY), Config.JPEG_QUALITY,
+                    int(cv2.IMWRITE_JPEG_QUALITY), jpeg_quality,
                     int(cv2.IMWRITE_JPEG_OPTIMIZE), 1
                 ]
                 
@@ -137,7 +137,8 @@ def get_stats():
         'hourly_stats': stats.get('hourly_stats', {}),
         'timestamp': stats.get('timestamp', ''),
         'processing_fps': stats.get('processing_fps', 0),
-        'active_ids': stats.get('active_ids', 0)
+        'active_ids': stats.get('active_trackers', 0),  # Changed from active_ids
+        'current_faces': stats.get('current_faces', 0)
     })
 
 @app.route('/api/reset', methods=['POST'])
@@ -154,15 +155,21 @@ def reset_stats():
 def health_check():
     """Health check endpoint"""
     counter = get_counter()
+    
+    # Detect which model is being used
+    model_type = 'Haar Cascade'
+    if hasattr(counter, 'use_dnn') and counter.use_dnn:
+        model_type = 'DNN Face Detector'
+    
     return jsonify({
         'status': 'ok',
-        'service': 'People Counter CCTV - Optimized',
+        'service': 'Face Counter CCTV - Optimized',
         'running': counter.is_running,
         'cctv_connected': counter.cap is not None,
-        'device': counter.device,
-        'model': Config.YOLO_MODEL,
+        'model': model_type,
         'fps': round(counter.fps, 1),
-        'processing_fps': round(counter.processing_fps, 1)
+        'processing_fps': round(counter.processing_fps, 1),
+        'active_trackers': len(counter.face_trackers)
     })
 
 @app.route('/api/history')
@@ -181,15 +188,23 @@ def get_history():
 def stream_info():
     """Get detailed stream information"""
     counter = get_counter()
+    
+    model_type = 'Haar Cascade'
+    if hasattr(counter, 'use_dnn') and counter.use_dnn:
+        model_type = 'DNN Face Detector'
+    
+    frame_width = getattr(Config, 'FRAME_WIDTH', 640)
+    frame_height = getattr(Config, 'FRAME_HEIGHT', 480)
+    
     return jsonify({
         'status': 'running' if counter.is_running else 'stopped',
         'fps': round(counter.fps, 1),
         'processing_fps': round(counter.processing_fps, 1),
-        'device': counter.device,
-        'model': Config.YOLO_MODEL,
-        'resolution': f"{Config.FRAME_WIDTH}x{Config.FRAME_HEIGHT}",
-        'active_tracks': len(counter.current_ids),
-        'total_detected': counter.stats_manager.total_detected
+        'model': model_type,
+        'resolution': f"{frame_width}x{frame_height}",
+        'active_tracks': len(counter.face_trackers),
+        'total_detected': counter.stats_manager.total_detected,
+        'current_faces': len(counter.current_faces)
     })
 
 # Error handlers
@@ -209,14 +224,14 @@ if __name__ == '__main__':
     cli.show_server_banner = lambda *x: None
     
     print("\n" + "="*70)
-    print("🚀 OPTIMIZED PEOPLE COUNTER - CCTV MONITORING SYSTEM")
+    print("🚀 FACE COUNTER - CCTV MONITORING SYSTEM")
     print("="*70)
     print(f"📹 CCTV IP: {Config.CCTV_IP}")
     print(f"👤 User: {Config.CCTV_USER}")
-    print(f"🎯 Model: {Config.YOLO_MODEL}")
-    print(f"📐 Resolution: {Config.FRAME_WIDTH}x{Config.FRAME_HEIGHT}")
-    print(f"⚡ GPU Enabled: {Config.USE_GPU}")
-    print(f"🔥 FP16 Mode: {Config.USE_FP16}")
+    print(f"🎯 Model: Haar Cascade + DNN (if available)")
+    frame_width = getattr(Config, 'FRAME_WIDTH', 640)
+    frame_height = getattr(Config, 'FRAME_HEIGHT', 480)
+    print(f"📐 Resolution: {frame_width}x{frame_height}")
     print("="*70)
     print(f"\n🌐 Starting web server...")
     print(f"📊 Dashboard: http://localhost:{Config.PORT}")
