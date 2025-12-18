@@ -1,6 +1,3 @@
-"""
-Enhanced Face Counter with Advanced Validation & False Positive Reduction
-"""
 import cv2
 import numpy as np
 from collections import defaultdict, deque
@@ -12,6 +9,11 @@ import os
 from queue import Queue
 import logging
 
+# Deep Learning Libraries
+import torch
+from PIL import Image
+from facenet_pytorch import MTCNN, InceptionResnetV1
+
 # Suppress warnings
 logging.getLogger('libav').setLevel(logging.ERROR)
 
@@ -19,50 +21,53 @@ from core.config import Config
 from utils.video_utils import VideoStreamHandler
 from utils.stats_manager import StatisticsManager
 
-class ImprovedFaceCounter:
+class MTCNNFaceCounter:
     def __init__(self, cctv_urls, user, password):
-        print("🔄 Initializing Advanced Face Counter with Validation...")
+        print("🔄 Initializing MTCNN Face Counter...")
         
         # Initialize components
         self.video_handler = VideoStreamHandler(cctv_urls, user, password)
         self.stats_manager = StatisticsManager()
         
-        # Load multiple face detection models
+        # Setup device (GPU if available)
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print(f"🖥️  Device: {self.device}")
+        
+        # Initialize MTCNN (Multi-task Cascaded Convolutional Networks)
         try:
-            # Haar Cascade - Frontal Face
-            cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-            self.face_cascade = cv2.CascadeClassifier(cascade_path)
+            self.mtcnn = MTCNN(
+                image_size=160,           # Face image size for recognition
+                margin=40,                # Margin around detected face
+                min_face_size=40,         # Minimum face size to detect
+                thresholds=[0.6, 0.7, 0.7],  # Detection thresholds for 3 stages
+                factor=0.709,             # Scale factor between pyramid layers
+                post_process=True,        # Apply post-processing
+                keep_all=True,            # Keep all detected faces
+                device=self.device
+            )
             
-            # Haar Cascade - Eyes (for validation)
-            eye_cascade_path = cv2.data.haarcascades + 'haarcascade_eye.xml'
-            self.eye_cascade = cv2.CascadeClassifier(eye_cascade_path)
+            # Initialize FaceNet for embeddings (optional, for better tracking)
+            self.use_embeddings = True
+            try:
+                self.resnet = InceptionResnetV1(pretrained='vggface2').eval().to(self.device)
+                print("✅ MTCNN + FaceNet loaded (embedding-based tracking)")
+            except:
+                self.use_embeddings = False
+                print("✅ MTCNN loaded (position-based tracking)")
             
-            # Profile Face (side view)
-            profile_cascade_path = cv2.data.haarcascades + 'haarcascade_profileface.xml'
-            self.profile_cascade = cv2.CascadeClassifier(profile_cascade_path)
-            
-            if self.face_cascade.empty():
-                raise Exception("Failed to load face cascade")
-            
-            print(f"✅ Face detection models loaded with validation")
         except Exception as e:
-            print(f"❌ Error loading face detection model: {e}")
+            print(f"❌ Error loading MTCNN: {e}")
             raise
         
-        # Try to load DNN face detector (more accurate)
+        # Haar Cascade as fallback (optional)
         try:
-            self.use_dnn = False
-            modelFile = "res10_300x300_ssd_iter_140000_fp16.caffemodel"
-            configFile = "deploy.prototxt"
-            if os.path.exists(modelFile) and os.path.exists(configFile):
-                self.net = cv2.dnn.readNetFromCaffe(configFile, modelFile)
-                self.use_dnn = True
-                print(f"✅ DNN face detector loaded (enhanced accuracy)")
-            else:
-                print(f"ℹ️  Using Haar Cascade with validation (DNN model not found)")
+            cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            self.face_cascade = cv2.CascadeClassifier(cascade_path)
+            self.use_fallback = not self.face_cascade.empty()
+            if self.use_fallback:
+                print("✅ Haar Cascade loaded as fallback")
         except:
-            self.use_dnn = False
-            print(f"ℹ️  Using Haar Cascade with multi-layer validation")
+            self.use_fallback = False
         
         # Multi-threading for real-time processing
         self.frame_queue = Queue(maxsize=2)
@@ -73,12 +78,12 @@ class ImprovedFaceCounter:
         self.detected_ids = set()
         self.current_faces = []
         self.next_id = 0
-        self.face_trackers = {}  # {id: (center_x, center_y, timestamp, quality_score)}
-        self.id_timeout = 1.5  # 1.5 detik timeout
+        self.face_trackers = {}  # {id: (center_x, center_y, timestamp, quality_score, embedding)}
+        self.id_timeout = 1.5  # 1.5 second timeout
         
         # Quality tracking per ID
         self.face_quality_history = defaultdict(lambda: deque(maxlen=10))
-        self.false_positive_filter = {}  # Track potential false positives
+        self.face_embeddings = {}  # Store embeddings for better tracking
         
         # State
         self.frame = None
@@ -95,16 +100,20 @@ class ImprovedFaceCounter:
         self.frame_skip = Config.FRAME_SKIP if hasattr(Config, 'FRAME_SKIP') else 0
         self.frame_count = 0
         
+        # Detection confidence threshold
+        self.confidence_threshold = 0.90  # MTCNN confidence threshold
+        
         # Load saved data
         self.stats_manager.load_statistics()
         Config.init_directories()
         
-        print("✅ Advanced validation system initialized")
-        print("   - Multi-cascade detection")
-        print("   - Eye validation")
-        print("   - Skin color detection")
-        print("   - Shape & size validation")
-        print("   - Motion analysis")
+        print("✅ MTCNN validation system initialized")
+        print("   - Multi-stage cascaded detection")
+        print("   - Facial landmark detection")
+        print("   - High-accuracy face alignment")
+        if self.use_embeddings:
+            print("   - FaceNet embeddings for tracking")
+        print("   - Quality-based validation")
     
     def start(self):
         """Start detection with multi-threading"""
@@ -119,7 +128,7 @@ class ImprovedFaceCounter:
         threading.Thread(target=self._detection_loop, daemon=True).start()
         threading.Thread(target=self._render_loop, daemon=True).start()
         
-        print("✅ Advanced face detection started with validation layers")
+        print("✅ MTCNN face detection started")
     
     def stop(self):
         """Stop detection"""
@@ -158,7 +167,7 @@ class ImprovedFaceCounter:
                 time.sleep(1)
     
     def _detection_loop(self):
-        """Dedicated thread for advanced face detection"""
+        """Dedicated thread for MTCNN face detection"""
         while self.is_running:
             try:
                 if self.frame_queue.empty():
@@ -176,11 +185,8 @@ class ImprovedFaceCounter:
                 
                 start_time = time.time()
                 
-                # Run advanced face detection with validation
-                if self.use_dnn:
-                    faces = self._detect_faces_dnn_validated(frame)
-                else:
-                    faces = self._detect_faces_haar_validated(frame)
+                # Run MTCNN face detection
+                faces = self._detect_faces_mtcnn(frame)
                 
                 # Calculate processing FPS
                 process_time = time.time() - start_time
@@ -194,257 +200,284 @@ class ImprovedFaceCounter:
                 print(f"❌ Detection error: {e}")
                 time.sleep(0.1)
     
-    def _detect_faces_haar_validated(self, frame):
+    def _detect_faces_mtcnn(self, frame):
         """
-        Advanced Haar Cascade detection with multiple validation layers
+        MTCNN face detection with validation
+        Returns: list of [x, y, w, h, confidence, landmarks, embedding]
         """
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray = cv2.equalizeHist(gray)
-        
-        # Detect frontal faces
-        faces = self.face_cascade.detectMultiScale(
-            gray,
-            scaleFactor=1.1,
-            minNeighbors=6,  # Increased to reduce false positives
-            minSize=(50, 50),  # Increased minimum size
-            maxSize=(400, 400),  # Add maximum size limit
-            flags=cv2.CASCADE_SCALE_IMAGE
-        )
-        
-        # Validate each detection
-        validated_faces = []
-        for (x, y, w, h) in faces:
-            quality_score = self._validate_face_region(frame, gray, x, y, w, h)
+        try:
+            # Convert BGR to RGB for MTCNN
+            img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img_pil = Image.fromarray(img_rgb)
             
-            # Only accept faces with quality score > threshold
-            if quality_score > 0.5:  # Adjustable threshold
-                validated_faces.append([x, y, w, h, quality_score])
-        
-        return np.array(validated_faces) if len(validated_faces) > 0 else np.array([])
+            # Detect faces with MTCNN
+            # Returns: boxes, probs, landmarks
+            boxes, probs, landmarks = self.mtcnn.detect(img_pil, landmarks=True)
+            
+            faces = []
+            
+            if boxes is not None and probs is not None:
+                for i, (box, prob) in enumerate(zip(boxes, probs)):
+                    # Filter by confidence threshold
+                    if prob < self.confidence_threshold:
+                        continue
+                    
+                    try:
+                        # Convert box format: [x1, y1, x2, y2] -> [x, y, w, h]
+                        x1, y1, x2, y2 = [int(coord) for coord in box]
+                        x1, y1 = max(0, x1), max(0, y1)
+                        x2 = min(frame.shape[1], x2)
+                        y2 = min(frame.shape[0], y2)
+                        
+                        w = x2 - x1
+                        h = y2 - y1
+                        
+                        # Validate face size
+                        if w < 40 or h < 40:
+                            continue
+                        
+                        # Additional validation
+                        quality_score = self._validate_face_region_mtcnn(
+                            frame, x1, y1, w, h, prob, 
+                            landmarks[i] if landmarks is not None else None
+                        )
+                        
+                        if quality_score < 0.5:  # Minimum quality threshold
+                            continue
+                        
+                        # Extract embedding if available
+                        embedding = None
+                        if self.use_embeddings:
+                            try:
+                                embedding = self._extract_embedding(img_pil, box)
+                            except:
+                                pass
+                        
+                        # Store face data
+                        face_data = {
+                            'box': [x1, y1, w, h],
+                            'confidence': float(prob),
+                            'quality': quality_score,
+                            'landmarks': landmarks[i].tolist() if landmarks is not None else None,
+                            'embedding': embedding
+                        }
+                        
+                        faces.append(face_data)
+                        
+                    except Exception as e:
+                        print(f"Error processing face {i}: {e}")
+                        continue
+            
+            return faces
+            
+        except Exception as e:
+            print(f"MTCNN detection error: {e}")
+            
+            # Fallback to Haar Cascade if MTCNN fails
+            if self.use_fallback:
+                return self._detect_faces_haar_fallback(frame)
+            
+            return []
     
-    def _detect_faces_dnn_validated(self, frame):
-        """
-        DNN detection with validation
-        """
-        h, w = frame.shape[:2]
-        blob = cv2.dnn.blobFromImage(frame, 1.0, (300, 300), 
-                                      [104, 117, 123], False, False)
-        
-        self.net.setInput(blob)
-        detections = self.net.forward()
-        
-        faces = []
-        confidence_threshold = 0.6  # Increased threshold
-        
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        for i in range(detections.shape[2]):
-            confidence = detections[0, 0, i, 2]
-            if confidence > confidence_threshold:
-                x1 = int(detections[0, 0, i, 3] * w)
-                y1 = int(detections[0, 0, i, 4] * h)
-                x2 = int(detections[0, 0, i, 5] * w)
-                y2 = int(detections[0, 0, i, 6] * h)
-                
-                # Validate detection
-                face_w = x2 - x1
-                face_h = y2 - y1
-                
-                # Additional validation
-                quality_score = self._validate_face_region(frame, gray, x1, y1, face_w, face_h)
-                combined_score = (confidence + quality_score) / 2
-                
-                if combined_score > 0.6:  # Combined threshold
-                    faces.append([x1, y1, face_w, face_h, combined_score])
-        
-        return np.array(faces) if len(faces) > 0 else np.array([])
+    def _extract_embedding(self, img_pil, box):
+        """Extract face embedding using FaceNet"""
+        try:
+            x1, y1, x2, y2 = [int(coord) for coord in box]
+            
+            # Crop and resize face
+            face_img = img_pil.crop((x1, y1, x2, y2))
+            face_img = face_img.resize((160, 160), Image.LANCZOS)
+            
+            # Convert to tensor
+            face_array = np.array(face_img).astype(np.float32)
+            face_array = (face_array - 127.5) / 128.0
+            face_tensor = torch.from_numpy(face_array).permute(2, 0, 1).to(self.device)
+            
+            # Extract embedding
+            with torch.no_grad():
+                embedding = self.resnet(face_tensor.unsqueeze(0))
+            
+            return embedding.cpu().numpy().flatten()
+            
+        except Exception as e:
+            return None
     
-    def _validate_face_region(self, frame, gray, x, y, w, h):
+    def _validate_face_region_mtcnn(self, frame, x, y, w, h, confidence, landmarks):
         """
-        Advanced validation with multiple checks
+        Advanced validation for MTCNN detected face
         Returns quality score (0.0 - 1.0)
         """
         score = 0.0
         checks_passed = 0
         total_checks = 0
         
-        # Ensure region is within frame
-        if x < 0 or y < 0 or x+w > frame.shape[1] or y+h > frame.shape[0]:
-            return 0.0
-        
-        face_roi = frame[y:y+h, x:x+w]
-        gray_roi = gray[y:y+h, x:x+w]
-        
-        if face_roi.size == 0:
-            return 0.0
-        
-        # CHECK 1: Aspect Ratio (faces are roughly oval, not too wide or tall)
+        # CHECK 1: MTCNN Confidence (most important)
         total_checks += 1
-        aspect_ratio = w / float(h)
-        if 0.6 < aspect_ratio < 1.4:  # Reasonable face proportions
-            score += 0.2
+        if confidence > 0.95:
+            score += 0.4
+            checks_passed += 1
+        elif confidence > 0.90:
+            score += 0.3
             checks_passed += 1
         
-        # CHECK 2: Size validation (not too small or too large)
+        # CHECK 2: Aspect Ratio
+        total_checks += 1
+        aspect_ratio = w / float(h)
+        if 0.7 < aspect_ratio < 1.3:  # Face proportions
+            score += 0.15
+            checks_passed += 1
+        
+        # CHECK 3: Size validation
         total_checks += 1
         face_area = w * h
         frame_area = frame.shape[0] * frame.shape[1]
         relative_size = face_area / frame_area
-        if 0.005 < relative_size < 0.3:  # 0.5% to 30% of frame
+        if 0.01 < relative_size < 0.5:  # 1% to 50% of frame
             score += 0.15
             checks_passed += 1
         
-        # CHECK 3: Eye detection (most important for validation)
-        total_checks += 1
-        try:
-            eyes = self.eye_cascade.detectMultiScale(
-                gray_roi,
-                scaleFactor=1.1,
-                minNeighbors=5,
-                minSize=(int(w*0.1), int(h*0.1)),
-                maxSize=(int(w*0.4), int(h*0.4))
-            )
-            
-            # Valid face should have 1-2 eyes detected
-            if len(eyes) >= 1 and len(eyes) <= 3:
-                score += 0.3  # Highest weight
-                checks_passed += 1
-                
-                # Extra validation: eyes should be in upper half of face
-                for (ex, ey, ew, eh) in eyes:
-                    if ey < h * 0.6:  # Eyes in upper 60% of face region
-                        score += 0.05
-                        break
-        except:
-            pass
+        # CHECK 4: Landmark validation (if available)
+        if landmarks is not None:
+            total_checks += 1
+            try:
+                # Check if landmarks are within face bounding box
+                landmarks_valid = all(
+                    x <= lm[0] <= x+w and y <= lm[1] <= y+h 
+                    for lm in landmarks
+                )
+                if landmarks_valid:
+                    score += 0.2
+                    checks_passed += 1
+            except:
+                pass
         
-        # CHECK 4: Skin color detection
+        # CHECK 5: Position validation (not at edge)
         total_checks += 1
-        if self._has_skin_color(face_roi):
-            score += 0.15
-            checks_passed += 1
-        
-        # CHECK 5: Texture analysis (faces have more texture than flat objects)
-        total_checks += 1
-        texture_score = self._analyze_texture(gray_roi)
-        if texture_score > 20:  # Threshold for texture variance
-            score += 0.1
-            checks_passed += 1
-        
-        # CHECK 6: Edge density (faces have moderate edge density)
-        total_checks += 1
-        edge_density = self._calculate_edge_density(gray_roi)
-        if 0.1 < edge_density < 0.4:  # Not too smooth, not too busy
+        margin = 10
+        if (x > margin and y > margin and 
+            x+w < frame.shape[1]-margin and y+h < frame.shape[0]-margin):
             score += 0.1
             checks_passed += 1
         
         # Normalize score
         normalized_score = min(1.0, score)
         
-        # Require at least 50% of checks to pass
-        if checks_passed < total_checks * 0.4:
+        # Require at least 60% of checks to pass
+        if checks_passed < total_checks * 0.6:
             return 0.0
         
         return normalized_score
     
-    def _has_skin_color(self, roi):
-        """
-        Check if region contains skin-like colors
-        """
+    def _detect_faces_haar_fallback(self, frame):
+        """Fallback Haar Cascade detection"""
         try:
-            # Convert to HSV for better skin detection
-            hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            gray = cv2.equalizeHist(gray)
             
-            # Define skin color range in HSV
-            # Skin tone typically: H(0-20), S(20-170), V(60-255)
-            lower_skin = np.array([0, 20, 60], dtype=np.uint8)
-            upper_skin = np.array([20, 170, 255], dtype=np.uint8)
+            boxes = self.face_cascade.detectMultiScale(
+                gray,
+                scaleFactor=1.1,
+                minNeighbors=6,
+                minSize=(50, 50),
+                maxSize=(400, 400)
+            )
             
-            # Create mask
-            mask = cv2.inRange(hsv, lower_skin, upper_skin)
+            faces = []
+            for (x, y, w, h) in boxes:
+                face_data = {
+                    'box': [int(x), int(y), int(w), int(h)],
+                    'confidence': 0.85,  # Default confidence for Haar
+                    'quality': 0.7,
+                    'landmarks': None,
+                    'embedding': None
+                }
+                faces.append(face_data)
             
-            # Calculate percentage of skin pixels
-            skin_percentage = np.sum(mask > 0) / mask.size
+            return faces
             
-            # Should have significant skin-colored pixels (>20%)
-            return skin_percentage > 0.2
         except:
-            return False
-    
-    def _analyze_texture(self, gray_roi):
-        """
-        Analyze texture variance (faces have natural texture)
-        """
-        try:
-            # Calculate standard deviation (texture measure)
-            texture = np.std(gray_roi)
-            return texture
-        except:
-            return 0
-    
-    def _calculate_edge_density(self, gray_roi):
-        """
-        Calculate edge density (faces have moderate edges)
-        """
-        try:
-            # Apply Canny edge detection
-            edges = cv2.Canny(gray_roi, 50, 150)
-            
-            # Calculate edge pixel ratio
-            edge_density = np.sum(edges > 0) / edges.size
-            return edge_density
-        except:
-            return 0
+            return []
     
     def _track_faces(self, faces, current_time):
         """
-        Advanced face tracking with quality-based validation
+        Advanced face tracking with embeddings and quality-based validation
         """
-        MAX_DISTANCE = 100  # Reduced for better accuracy
+        MAX_DISTANCE = 100  # Maximum pixel distance for position-based tracking
+        EMBEDDING_THRESHOLD = 0.6  # Cosine similarity threshold for embedding-based tracking
         
         # Clean up old trackers
         ids_to_remove = []
-        for face_id, (x, y, timestamp, quality) in self.face_trackers.items():
+        for face_id, tracker_data in self.face_trackers.items():
+            timestamp = tracker_data[2]
             if current_time - timestamp > self.id_timeout:
                 ids_to_remove.append(face_id)
         
         for face_id in ids_to_remove:
             del self.face_trackers[face_id]
-            # Also remove from quality history
             if face_id in self.face_quality_history:
                 del self.face_quality_history[face_id]
+            if face_id in self.face_embeddings:
+                del self.face_embeddings[face_id]
         
         # Match new faces with existing trackers
         tracked_faces = []
         used_ids = set()
         
         for face in faces:
-            x, y, w, h = face[:4]
-            quality = face[4] if len(face) > 4 else 0.5
+            box = face['box']
+            x, y, w, h = box
+            confidence = face['confidence']
+            quality = face['quality']
+            embedding = face['embedding']
             
             center_x = x + w // 2
             center_y = y + h // 2
             
-            # Find closest existing tracker
+            # Find best matching tracker
             best_id = None
-            best_distance = MAX_DISTANCE
+            best_score = float('inf')
             
-            for face_id, (track_x, track_y, _, prev_quality) in self.face_trackers.items():
+            for face_id, tracker_data in self.face_trackers.items():
                 if face_id in used_ids:
                     continue
                 
-                distance = np.sqrt((center_x - track_x)**2 + (center_y - track_y)**2)
+                track_x, track_y, _, prev_quality, prev_embedding = tracker_data
                 
-                # Consider both distance and quality consistency
+                # Position-based distance
+                position_distance = np.sqrt((center_x - track_x)**2 + (center_y - track_y)**2)
+                
+                # Embedding-based similarity (if available)
+                embedding_similarity = 0.0
+                if embedding is not None and prev_embedding is not None:
+                    try:
+                        # Cosine similarity
+                        embedding = embedding / np.linalg.norm(embedding)
+                        prev_embedding = prev_embedding / np.linalg.norm(prev_embedding)
+                        embedding_similarity = np.dot(embedding, prev_embedding)
+                    except:
+                        embedding_similarity = 0.0
+                
+                # Combined score
+                if self.use_embeddings and embedding is not None and prev_embedding is not None:
+                    # Prioritize embedding similarity
+                    if embedding_similarity > EMBEDDING_THRESHOLD:
+                        combined_score = position_distance * (1 - embedding_similarity)
+                    else:
+                        combined_score = float('inf')  # Different person
+                else:
+                    # Use only position
+                    combined_score = position_distance
+                
+                # Quality consistency bonus
                 quality_diff = abs(quality - prev_quality)
-                adjusted_distance = distance * (1 + quality_diff)
+                combined_score *= (1 + quality_diff * 0.5)
                 
-                if adjusted_distance < best_distance:
-                    best_distance = adjusted_distance
+                if combined_score < best_score:
+                    best_score = combined_score
                     best_id = face_id
             
             # Assign ID
-            if best_id is not None:
+            if best_id is not None and best_score < MAX_DISTANCE:
                 face_id = best_id
             else:
                 face_id = self.next_id
@@ -454,19 +487,26 @@ class ImprovedFaceCounter:
             self.face_quality_history[face_id].append(quality)
             avg_quality = np.mean(list(self.face_quality_history[face_id]))
             
+            # Store embedding
+            if embedding is not None:
+                self.face_embeddings[face_id] = embedding
+            
             # Only track faces with consistently high quality
-            if avg_quality > 0.5:
+            if avg_quality > 0.5 and confidence > self.confidence_threshold:
                 # Track as new unique face
                 if face_id not in self.detected_ids:
                     self.detected_ids.add(face_id)
                     self.stats_manager.add_unique_person()
-                    print(f"✨ New face validated! ID: {face_id} | Quality: {avg_quality:.2f} | Total: {self.stats_manager.total_detected}")
+                    print(f"✨ New face detected! ID: {face_id} | Confidence: {confidence:.2f} | Quality: {avg_quality:.2f} | Total: {self.stats_manager.total_detected}")
                 
                 # Update tracker
-                self.face_trackers[face_id] = (center_x, center_y, current_time, quality)
+                self.face_trackers[face_id] = (
+                    center_x, center_y, current_time, quality,
+                    self.face_embeddings.get(face_id)
+                )
                 used_ids.add(face_id)
                 
-                tracked_faces.append((face[:4], face_id, quality))
+                tracked_faces.append((box, face_id, quality, confidence))
                 
                 # Update track history
                 self.track_history[face_id].append((float(center_x), float(center_y)))
@@ -484,7 +524,7 @@ class ImprovedFaceCounter:
                 frame, faces, timestamp = self.result_queue.get(timeout=0.1)
                 
                 if faces is None:
-                    self._draw_dashboard(frame)
+                   # self._draw_dashboard(frame)
                     self.frame = frame
                     continue
                 
@@ -495,15 +535,15 @@ class ImprovedFaceCounter:
                 self.current_faces = tracked_faces
                 
                 # Draw detections with quality indicators
-                for face_box, face_id, quality in tracked_faces:
-                    self._draw_detection(frame, face_box, face_id, quality)
+                for face_box, face_id, quality, confidence in tracked_faces:
+                    self._draw_detection(frame, face_box, face_id, quality, confidence)
                     self._draw_trail(frame, face_id)
                 
                 # Update statistics
                 self.stats_manager.update(len(tracked_faces))
                 
                 # Draw dashboard
-                self._draw_dashboard(frame)
+                #self._draw_dashboard(frame)
                 
                 self.frame = frame
                 
@@ -527,32 +567,32 @@ class ImprovedFaceCounter:
         time.sleep(2)
         self.cap = self.video_handler.connect()
     
-    def _draw_detection(self, frame, face_box, face_id, quality):
+    def _draw_detection(self, frame, face_box, face_id, quality, confidence):
         """Draw face bounding box with quality indicator"""
         x, y, w, h = face_box
-        
-        # Convert to int explicitly (fix for OpenCV 4.12.0)
         x, y, w, h = int(x), int(y), int(w), int(h)
         
-        # Color based on quality score
-        if quality > 0.8:
+        # Color based on quality and confidence
+        combined_score = (quality + confidence) / 2
+        
+        if combined_score > 0.9:
             color = (0, 255, 0)  # Green - Excellent
-            label_text = "Sudah Terdeteksi"
-        elif quality > 0.6:
+            label_text = "Terdeteksi"
+        elif combined_score > 0.8:
             color = (0, 255, 255)  # Yellow - Good
             label_text = "Terdeteksi Baik"
         else:
             color = (0, 165, 255)  # Orange - Fair
-            label_text = "Belum Terdeteksi"
+            label_text = "Terverifikasi"
         
         # Draw rectangle
         cv2.rectangle(frame, (x, y), (x+w, y+h), color, 3)
         
-        # Draw label with quality
-        label = f"Face #{face_id} | {label_text} {quality:.0%}"
+        # Draw label
+        label = f"Face #{face_id} | {label_text} ({confidence:.0%})"
         
         (label_w, label_h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
-        label_y = max(label_h + 10, y)  # Ensure label is within frame
+        label_y = max(label_h + 10, y)
         cv2.rectangle(frame, (x, label_y-label_h-10), (x+label_w+10, label_y), color, -1)
         cv2.putText(frame, label, (x+5, label_y-5),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
@@ -568,13 +608,10 @@ class ImprovedFaceCounter:
         bar_x = x
         bar_y = y + h + 5
         
-        # Ensure bar is within frame
         if bar_y + bar_height < frame.shape[0]:
-            # Background
             cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_width, bar_y + bar_height), 
                          (50, 50, 50), -1)
-            # Quality fill
-            fill_width = int(bar_width * quality)
+            fill_width = int(bar_width * combined_score)
             cv2.rectangle(frame, (bar_x, bar_y), (bar_x + fill_width, bar_y + bar_height), 
                          color, -1)
     
@@ -591,20 +628,20 @@ class ImprovedFaceCounter:
                         (int(points[i][0]), int(points[i][1])),
                         color, thickness)
     
-    def _draw_dashboard(self, frame):
-        """Draw statistics overlay"""
+    """def _draw_dashboard(self, frame):
+       Draw statistics overlay
         h, w = frame.shape[:2]
         
         # Semi-transparent overlay
         overlay = frame.copy()
-        cv2.rectangle(overlay, (10, 10), (480, 250), (20, 20, 20), -1)
+        cv2.rectangle(overlay, (10, 10), (480, 270), (20, 20, 20), -1)
         cv2.addWeighted(overlay, 0.75, frame, 0.25, 0, frame)
         
         # Border
-        cv2.rectangle(frame, (10, 10), (480, 250), (0, 255, 0), 2)
+        cv2.rectangle(frame, (10, 10), (480, 270), (0, 255, 0), 2)
         
         # Title
-        cv2.putText(frame, "ADVANCED FACE COUNTER", (20, 35),
+        cv2.putText(frame, "MTCNN FACE COUNTER", (20, 35),
                    cv2.FONT_HERSHEY_DUPLEX, 0.7, (0, 255, 0), 2)
         
         # Statistics
@@ -615,14 +652,15 @@ class ImprovedFaceCounter:
             (f"Total Verified: {self.stats_manager.total_detected}", (255, 165, 0)),
             (f"Display FPS: {self.fps:.1f} | Process: {self.processing_fps:.1f}", (255, 255, 255)),
             (f"Active Trackers: {len(self.face_trackers)}", (200, 200, 200)),
-            (f"Validation: Multi-Layer", (100, 255, 100)),
+            (f"Detection: MTCNN", (100, 255, 100)),
+            (f"Embeddings: {'Enabled' if self.use_embeddings else 'Disabled'}", (150, 200, 255)),
             (f"Time: {datetime.now().strftime('%H:%M:%S')}", (150, 150, 150))
         ]
         
         for text, color in stats:
             cv2.putText(frame, text, (25, y_offset),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
-            y_offset += 30
+            y_offset += 30"""
     
     def get_frame(self):
         """Get current frame"""
@@ -650,7 +688,8 @@ class ImprovedFaceCounter:
         stats['active_trackers'] = len(self.face_trackers)
         stats['current_faces'] = len(self.current_faces)
         stats['timestamp'] = datetime.now().isoformat()
-        stats['validation_enabled'] = True
+        stats['detection_method'] = 'MTCNN'
+        stats['embedding_tracking'] = self.use_embeddings
         return stats
     
     def get_historical_data(self):
@@ -664,8 +703,10 @@ class ImprovedFaceCounter:
         self.face_trackers.clear()
         self.current_faces = []
         self.face_quality_history.clear()
+        self.face_embeddings.clear()
         self.next_id = 0
         print("🔄 Daily stats reset")
 
 # Backward compatibility
-FaceCounter = ImprovedFaceCounter
+FaceCounter = MTCNNFaceCounter
+ImprovedFaceCounter = MTCNNFaceCounter
