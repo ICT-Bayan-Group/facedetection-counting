@@ -8,7 +8,7 @@ class Config:
     """Application configuration for face detection with performance optimizations"""
     
     # CCTV Settings
-    CCTV_IP = "10.2.22.15"
+    CCTV_IP = "10.2.4.210"
     CCTV_USER = "user"
     CCTV_PASS = "Okedeh.12345"
     
