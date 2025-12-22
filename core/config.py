@@ -8,9 +8,9 @@ class Config:
     """Application configuration for face detection with performance optimizations"""
     
     # CCTV Settings
-    CCTV_IP = "10.2.4.210"
-    CCTV_USER = "user"
-    CCTV_PASS = "Okedeh.12345"
+    CCTV_IP = "10.2.22.39"
+    CCTV_USER = "admin"
+    CCTV_PASS = "ictb4y4n"
     
     # Optimized CCTV URL Options (ordered by performance)
     CCTV_URLS = [
