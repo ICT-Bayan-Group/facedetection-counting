@@ -1,7 +1,7 @@
 """
 Optimized Flask Application for Face Counter - Compatible with Frontend
 """
-from flask import Flask, render_template, Response, jsonify
+from flask import Flask, render_template, Response, jsonify, request
 from flask_cors import CORS
 import cv2
 import time
@@ -119,25 +119,71 @@ def video_feed():
         }
     )
 
+@app.route('/api/database/stats')
+def get_database_stats():
+    """Get face database statistics"""
+    counter = get_counter()
+    db_stats = counter.get_database_stats()
+    return jsonify(db_stats)
+
+@app.route('/api/database/save', methods=['POST'])
+def save_database():
+    """Manual save face database"""
+    counter = get_counter()
+    counter.save_face_database()
+    return jsonify({
+        'success': True,
+        'message': 'Face database saved successfully',
+        'total_faces': len(counter.face_db.faces)
+    })
+
+@app.route('/api/database/reset', methods=['POST'])
+def reset_database():
+    """Reset face database - HATI-HATI!"""
+    if request.json and request.json.get('confirm') == 'yes':
+        counter = get_counter()
+        counter.reset_face_database()
+        return jsonify({
+            'success': True,
+            'message': 'Face database has been completely reset'
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'message': 'Confirmation required. Send {"confirm": "yes"}'
+        }), 400
+
+@app.route('/api/database/info')
+def database_info():
+    """Get detailed database information"""
+    counter = get_counter()
+    
+    return jsonify({
+        'total_faces': len(counter.face_db.faces),
+        'similarity_threshold': counter.face_db.similarity_threshold,
+        'database_path': counter.face_db.db_path,
+        'database_exists': os.path.exists(counter.face_db.db_path)
+    })
+
 @app.route('/api/stats')
 def get_stats():
-    """
-    Get current statistics
-    Returns format compatible with original frontend
-    """
+    """Get current statistics - UPDATED VERSION"""
     counter = get_counter()
     stats = counter.get_statistics()
     
-    # Ensure all required fields are present
+    # Tambahkan info database
+    stats['database_faces'] = len(counter.face_db.faces)
+    
     return jsonify({
         'current_count': stats.get('current_count', 0),
         'max_count': stats.get('max_count', 0),
         'daily_total': stats.get('daily_total', 0),
+        'database_faces': stats.get('database_faces', 0),  # NEW
         'fps': stats.get('fps', 0),
         'hourly_stats': stats.get('hourly_stats', {}),
         'timestamp': stats.get('timestamp', ''),
         'processing_fps': stats.get('processing_fps', 0),
-        'active_ids': stats.get('active_trackers', 0),  # Changed from active_ids
+        'active_ids': stats.get('active_trackers', 0),
         'current_faces': stats.get('current_faces', 0)
     })
 

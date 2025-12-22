@@ -16,7 +16,7 @@ from facenet_pytorch import MTCNN, InceptionResnetV1
 
 # Suppress warnings
 logging.getLogger('libav').setLevel(logging.ERROR)
-
+from utils.face_database import FaceDatabase
 from core.config import Config
 from utils.video_utils import VideoStreamHandler
 from utils.stats_manager import StatisticsManager
@@ -28,6 +28,8 @@ class MTCNNFaceCounter:
         # Initialize components
         self.video_handler = VideoStreamHandler(cctv_urls, user, password)
         self.stats_manager = StatisticsManager()
+        self.face_db = FaceDatabase()
+        print(f"📊 Face Database: {len(self.face_db.faces)} known faces")
         
         # Setup device (GPU if available)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -136,6 +138,9 @@ class MTCNNFaceCounter:
         if self.cap:
             self.cap.release()
         self.stats_manager.save_statistics()
+        self.face_db.save_database()
+        
+        print(f"💾 Database saved: {len(self.face_db.faces)} unique faces")
         print("⏸️  Detection stopped")
     
     def _frame_capture_loop(self):
@@ -400,10 +405,12 @@ class MTCNNFaceCounter:
     
     def _track_faces(self, faces, current_time):
         """
-        Advanced face tracking with embeddings and quality-based validation
+        Advanced face tracking dengan PERSISTENT DATABASE
+        - Mencegah double counting dengan face recognition
+        - Menyimpan wajah yang sudah terdeteksi ke database
         """
-        MAX_DISTANCE = 100  # Maximum pixel distance for position-based tracking
-        EMBEDDING_THRESHOLD = 0.6  # Cosine similarity threshold for embedding-based tracking
+        MAX_DISTANCE = 100
+        EMBEDDING_THRESHOLD = 0.6
         
         # Clean up old trackers
         ids_to_remove = []
@@ -419,7 +426,7 @@ class MTCNNFaceCounter:
             if face_id in self.face_embeddings:
                 del self.face_embeddings[face_id]
         
-        # Match new faces with existing trackers
+        # Match new faces
         tracked_faces = []
         used_ids = set()
         
@@ -433,7 +440,19 @@ class MTCNNFaceCounter:
             center_x = x + w // 2
             center_y = y + h // 2
             
-            # Find best matching tracker
+            # === STEP 1: Cek apakah wajah sudah ada di DATABASE GLOBAL ===
+            db_match_id = None
+            db_similarity = 0
+            is_known_face = False
+            
+            if embedding is not None:
+                db_match_id, db_similarity = self.face_db.find_matching_face(embedding)
+                
+                if db_match_id is not None:
+                    is_known_face = True
+                    print(f"🔍 Recognized known face: {db_match_id} (similarity: {db_similarity:.2f})")
+            
+            # === STEP 2: Find best matching ACTIVE tracker ===
             best_id = None
             best_score = float('inf')
             
@@ -443,14 +462,13 @@ class MTCNNFaceCounter:
                 
                 track_x, track_y, _, prev_quality, prev_embedding = tracker_data
                 
-                # Position-based distance
+                # Position distance
                 position_distance = np.sqrt((center_x - track_x)**2 + (center_y - track_y)**2)
                 
-                # Embedding-based similarity (if available)
+                # Embedding similarity
                 embedding_similarity = 0.0
                 if embedding is not None and prev_embedding is not None:
                     try:
-                        # Cosine similarity
                         embedding = embedding / np.linalg.norm(embedding)
                         prev_embedding = prev_embedding / np.linalg.norm(prev_embedding)
                         embedding_similarity = np.dot(embedding, prev_embedding)
@@ -459,16 +477,13 @@ class MTCNNFaceCounter:
                 
                 # Combined score
                 if self.use_embeddings and embedding is not None and prev_embedding is not None:
-                    # Prioritize embedding similarity
                     if embedding_similarity > EMBEDDING_THRESHOLD:
                         combined_score = position_distance * (1 - embedding_similarity)
                     else:
-                        combined_score = float('inf')  # Different person
+                        combined_score = float('inf')
                 else:
-                    # Use only position
                     combined_score = position_distance
                 
-                # Quality consistency bonus
                 quality_diff = abs(quality - prev_quality)
                 combined_score *= (1 + quality_diff * 0.5)
                 
@@ -476,14 +491,15 @@ class MTCNNFaceCounter:
                     best_score = combined_score
                     best_id = face_id
             
-            # Assign ID
+            # === STEP 3: Assign ID ===
             if best_id is not None and best_score < MAX_DISTANCE:
                 face_id = best_id
             else:
+                # Generate new ID
                 face_id = self.next_id
                 self.next_id += 1
             
-            # Update quality history
+            # === STEP 4: Update quality history ===
             self.face_quality_history[face_id].append(quality)
             avg_quality = np.mean(list(self.face_quality_history[face_id]))
             
@@ -491,13 +507,41 @@ class MTCNNFaceCounter:
             if embedding is not None:
                 self.face_embeddings[face_id] = embedding
             
-            # Only track faces with consistently high quality
+            # === STEP 5: Track hanya jika quality tinggi ===
             if avg_quality > 0.5 and confidence > self.confidence_threshold:
-                # Track as new unique face
-                if face_id not in self.detected_ids:
-                    self.detected_ids.add(face_id)
-                    self.stats_manager.add_unique_person()
-                    print(f"✨ New face detected! ID: {face_id} | Confidence: {confidence:.2f} | Quality: {avg_quality:.2f} | Total: {self.stats_manager.total_detected}")
+                
+                # === STEP 6: CEK DATABASE - TAMBAH KE UNIQUE HANYA JIKA BENAR-BENAR BARU ===
+                color_indicator = None  # Untuk visual feedback
+                
+                if embedding is not None:
+                    # Tambah/update ke database
+                    is_new_face, matched_db_id, similarity = self.face_db.add_or_update_face(
+                        str(face_id), 
+                        embedding
+                    )
+                    
+                    if is_new_face:
+                        # WAJAH BARU - Tambah ke unique counter
+                        if face_id not in self.detected_ids:
+                            self.detected_ids.add(face_id)
+                            self.stats_manager.add_unique_person()
+                            color_indicator = 'new'  # GREEN - Wajah baru
+                            print(f"✨ NEW UNIQUE FACE! ID: {face_id} | Confidence: {confidence:.2f} | Quality: {avg_quality:.2f} | Total Unique: {self.stats_manager.total_detected}")
+                    else:
+                        # WAJAH SUDAH DIKENAL - JANGAN tambah ke counter
+                        color_indicator = 'known'  # BLUE - Wajah sudah dikenal
+                        if face_id not in self.detected_ids:
+                            # Prevent dari dihitung sebagai unique
+                            self.detected_ids.add(face_id)
+                        print(f"👤 Known face detected: {matched_db_id} (similarity: {similarity:.2f})")
+                
+                else:
+                    # Tidak ada embedding - gunakan fallback tracking
+                    if face_id not in self.detected_ids:
+                        self.detected_ids.add(face_id)
+                        self.stats_manager.add_unique_person()
+                        color_indicator = 'new'
+                        print(f"⚠️  Face detected without embedding - ID: {face_id}")
                 
                 # Update tracker
                 self.face_trackers[face_id] = (
@@ -506,7 +550,8 @@ class MTCNNFaceCounter:
                 )
                 used_ids.add(face_id)
                 
-                tracked_faces.append((box, face_id, quality, confidence))
+                # Add color indicator untuk drawing
+                tracked_faces.append((box, face_id, quality, confidence, color_indicator))
                 
                 # Update track history
                 self.track_history[face_id].append((float(center_x), float(center_y)))
@@ -524,26 +569,28 @@ class MTCNNFaceCounter:
                 frame, faces, timestamp = self.result_queue.get(timeout=0.1)
                 
                 if faces is None:
-                   # self._draw_dashboard(frame)
                     self.frame = frame
                     continue
                 
                 current_time = time.time()
                 
-                # Track faces with advanced validation
+                # Track faces dengan database integration
                 tracked_faces = self._track_faces(faces, current_time)
                 self.current_faces = tracked_faces
                 
-                # Draw detections with quality indicators
-                for face_box, face_id, quality, confidence in tracked_faces:
-                    self._draw_detection(frame, face_box, face_id, quality, confidence)
+                # Draw detections dengan color indicator
+                for face_data in tracked_faces:
+                    if len(face_data) == 5:  # New format dengan color_indicator
+                        face_box, face_id, quality, confidence, color_indicator = face_data
+                        self._draw_detection(frame, face_box, face_id, quality, confidence, color_indicator)
+                    else:  # Old format
+                        face_box, face_id, quality, confidence = face_data
+                        self._draw_detection(frame, face_box, face_id, quality, confidence)
+                    
                     self._draw_trail(frame, face_id)
                 
                 # Update statistics
                 self.stats_manager.update(len(tracked_faces))
-                
-                # Draw dashboard
-                #self._draw_dashboard(frame)
                 
                 self.frame = frame
                 
@@ -567,23 +614,32 @@ class MTCNNFaceCounter:
         time.sleep(2)
         self.cap = self.video_handler.connect()
     
-    def _draw_detection(self, frame, face_box, face_id, quality, confidence):
-        """Draw face bounding box with quality indicator"""
+    def _draw_detection(self, frame, face_box, face_id, quality, confidence, color_indicator=None):
+        """Draw face bounding box dengan color indicator untuk known/new face"""
         x, y, w, h = face_box
         x, y, w, h = int(x), int(y), int(w), int(h)
         
-        # Color based on quality and confidence
-        combined_score = (quality + confidence) / 2
-        
-        if combined_score > 0.9:
-            color = (0, 255, 0)  # Green - Excellent
-            label_text = "Terdeteksi"
-        elif combined_score > 0.8:
-            color = (0, 255, 255)  # Yellow - Good
-            label_text = "Terdeteksi Baik"
+        # === COLOR BASED ON FACE STATUS ===
+        if color_indicator == 'new':
+            # HIJAU - Wajah BARU (unique)
+            color = (0, 255, 0)
+            label_text = "NEW FACE"
+        elif color_indicator == 'known':
+            # BIRU - Wajah SUDAH DIKENAL (tidak dihitung unique)
+            color = (255, 165, 0)  # Orange/Blue
+            label_text = "KNOWN FACE"
         else:
-            color = (0, 165, 255)  # Orange - Fair
-            label_text = "Terverifikasi"
+            # Default - berdasarkan quality
+            combined_score = (quality + confidence) / 2
+            if combined_score > 0.9:
+                color = (0, 255, 0)
+                label_text = "Terdeteksi"
+            elif combined_score > 0.8:
+                color = (0, 255, 255)
+                label_text = "Terdeteksi Baik"
+            else:
+                color = (0, 165, 255)
+                label_text = "Terverifikasi"
         
         # Draw rectangle
         cv2.rectangle(frame, (x, y), (x+w, y+h), color, 3)
@@ -595,7 +651,7 @@ class MTCNNFaceCounter:
         label_y = max(label_h + 10, y)
         cv2.rectangle(frame, (x, label_y-label_h-10), (x+label_w+10, label_y), color, -1)
         cv2.putText(frame, label, (x+5, label_y-5),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
         
         # Draw center point
         center_x = int(x + w // 2)
@@ -610,10 +666,10 @@ class MTCNNFaceCounter:
         
         if bar_y + bar_height < frame.shape[0]:
             cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_width, bar_y + bar_height), 
-                         (50, 50, 50), -1)
-            fill_width = int(bar_width * combined_score)
+                        (50, 50, 50), -1)
+            fill_width = int(bar_width * ((quality + confidence) / 2))
             cv2.rectangle(frame, (bar_x, bar_y), (bar_x + fill_width, bar_y + bar_height), 
-                         color, -1)
+                        color, -1)
     
     def _draw_trail(self, frame, face_id):
         """Draw tracking trail"""
@@ -679,6 +735,20 @@ class MTCNNFaceCounter:
             cv2.IMWRITE_JPEG_OPTIMIZE, 1
         ])
         return buffer.tobytes()
+    def get_database_stats(self):
+        """Get statistik face database"""
+        return self.face_db.get_statistics()
+
+    def save_face_database(self):
+            """Manual save database"""
+            self.face_db.save_database()
+            print("💾 Face database saved")
+
+    def reset_face_database(self):
+            """Reset face database"""
+            self.face_db.reset_database()
+            self.detected_ids.clear()
+            print("🔄 Face database reset")
     
     def get_statistics(self):
         """Get current statistics"""
@@ -697,15 +767,19 @@ class MTCNNFaceCounter:
         return self.stats_manager.get_historical_data()
     
     def reset_daily_stats(self):
-        """Reset daily statistics"""
+        """Reset daily statistics (TANPA reset database)"""
         self.stats_manager.reset_daily()
-        self.detected_ids.clear()
+        # JANGAN reset detected_ids dan face_db - biarkan tetap untuk prevent double count
         self.face_trackers.clear()
         self.current_faces = []
         self.face_quality_history.clear()
         self.face_embeddings.clear()
         self.next_id = 0
-        print("🔄 Daily stats reset")
+        
+        # Save database saat reset
+        self.face_db.save_database()
+        
+        print("🔄 Daily stats reset (face database preserved)")
 
 # Backward compatibility
 FaceCounter = MTCNNFaceCounter
