@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Pengunjung - Face Counter</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .stat-card {
+      background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+      transition: all 0.3s ease;
+    }
+    .stat-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+    }
+    .table-row:hover {
+      background-color: #f1f5f9;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+    .status-selesai {
+      background-color: #dcfce7;
+      color: #166534;
+    }
+    .status-gagal {
+      background-color: #fee2e2;
+      color: #991b1b;
+    }
+    .status-running {
+      background-color: #dbeafe;
+      color: #1e40af;
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: white;
+      border-radius: 9999px;
+      font-weight: 600;
+      font-size: 0.875rem;
+      box-shadow: 0 4px 6px rgba(239, 68, 68, 0.3);
+    }
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      background: white;
+      border-radius: 50%;
+      animation: blink 1.5s infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 min-h-screen">
+  
+  <!-- Header -->
+  <header class="bg-white/80 backdrop-blur-lg border-b border-gray-200/50 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <img src="https://res.cloudinary.com/dwyi4d3rq/image/upload/v1765779007/BAYAN_R_-_BAWAH_xs3qyv.png" alt="Logo" class="h-12 w-12" />
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">Data Pengunjung</h1>
+            <p class="text-sm text-gray-500">Rekapitulasi Hasil Deteksi Face Counter</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <!-- LIVE INDICATOR -->
+          <div id="liveIndicator" class="live-badge hidden">
+            <span class="live-dot"></span>
+            <span>LIVE</span>
+          </div>
+
+          <a href="/" class="flex items-center gap-2 px-4 py-2 bg-white rounded-full border border-gray-200 hover:bg-gray-50 transition-all">
+            <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
+            </svg>
+            <span class="text-sm font-medium text-gray-700">Dashboard</span>
+          </a>
+          
+          <button onclick="exportData()" class="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold rounded-full shadow-lg transition-all">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+            </svg>
+            Export CSV
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    
+    <!-- Statistics Summary -->
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
+      <div class="stat-card rounded-3xl p-6 border shadow-lg">
+        <div class="flex items-center justify-between mb-4">
+          <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+              <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
+            </svg>
+          </div>
+        </div>
+        <h3 class="text-sm font-medium text-gray-600 mb-1">Total Sesi</h3>
+        <p class="text-3xl font-bold text-gray-900" id="totalSessions">0</p>
+      </div>
+
+      <div class="stat-card rounded-3xl p-6 border shadow-lg">
+        <div class="flex items-center justify-between mb-4">
+          <div class="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/>
+            </svg>
+          </div>
+        </div>
+        <h3 class="text-sm font-medium text-gray-600 mb-1">Total Pengunjung</h3>
+        <p class="text-3xl font-bold text-gray-900" id="totalVisitors">0</p>
+      </div>
+
+      <div class="stat-card rounded-3xl p-6 border shadow-lg">
+        <div class="flex items-center justify-between mb-4">
+          <div class="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-500 rounded-2xl flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/>
+            </svg>
+          </div>
+        </div>
+        <h3 class="text-sm font-medium text-gray-600 mb-1">Rata-rata per Sesi</h3>
+        <p class="text-3xl font-bold text-gray-900" id="avgVisitors">0</p>
+      </div>
+
+      <div class="stat-card rounded-3xl p-6 border shadow-lg">
+        <div class="flex items-center justify-between mb-4">
+          <div class="w-12 h-12 bg-gradient-to-br from-orange-500 to-amber-500 rounded-2xl flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+            </svg>
+          </div>
+        </div>
+        <h3 class="text-sm font-medium text-gray-600 mb-1">Durasi Rata-rata</h3>
+        <p class="text-3xl font-bold text-gray-900" id="avgDuration">0</p>
+        <p class="text-xs text-gray-500">menit</p>
+      </div>
+
+      <!-- NEW: Database Faces -->
+      <div class="stat-card rounded-3xl p-6 border shadow-lg">
+        <div class="flex items-center justify-between mb-4">
+          <div class="w-12 h-12 bg-gradient-to-br from-pink-500 to-rose-500 rounded-2xl flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
+            </svg>
+          </div>
+        </div>
+        <h3 class="text-sm font-medium text-gray-600 mb-1">Unique Faces DB</h3>
+        <p class="text-3xl font-bold text-gray-900" id="databaseFaces">0</p>
+      </div>
+    </div>
+
+    <!-- Filter & Actions -->
+    <div class="stat-card rounded-3xl p-6 border shadow-lg mb-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-4 w-full md:w-auto">
+          <div class="flex items-center gap-2">
+            <svg class="w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clip-rule="evenodd"/>
+            </svg>
+            <label class="text-sm font-medium text-gray-700">Filter Tanggal:</label>
+          </div>
+          <input type="date" id="dateFilter" class="px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" onchange="filterByDate()">
+          <button onclick="clearFilter()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-all">
+            Reset Filter
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-gray-500" id="lastUpdate">Update: -</span>
+          <button onclick="refreshData()" class="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-xl transition-all">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+            </svg>
+            Refresh
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sessions Table -->
+    <div class="stat-card rounded-3xl overflow-hidden border shadow-lg">
+      <div class="bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-4">
+        <h2 class="text-lg font-semibold text-white">Riwayat Sesi Deteksi</h2>
+      </div>
+      
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead class="bg-gray-50 border-b-2 border-gray-200">
+            <tr>
+              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">No</th>
+              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Tanggal</th>
+              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Waktu Mulai</th>
+              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Waktu Selesai</th>
+              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Total Pengunjung</th>
+              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Lokasi/Kamera</th>
+              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Durasi</th>
+              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="sessionsTableBody" class="bg-white divide-y divide-gray-200">
+            <tr>
+              <td colspan="9" class="px-6 py-12 text-center text-gray-500">
+                <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+                </svg>
+                <p class="text-lg font-medium">Memuat data...</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    let sessionsData = [];
+    let currentFilter = null;
+    let hasLiveSession = false;
+
+    // Load data on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      loadSessionsData();
+      setInterval(loadSessionsData, 10000); // Refresh every 10 seconds
+    });
+
+   async function loadSessionsData() {
+      try {
+        const response = await fetch('/api/sessions');
+        const data = await response.json();
+        
+        if (!data.success) {
+          throw new Error(data.message || 'Failed to load sessions');
+        }
+        
+        sessionsData = data.sessions || [];
+        
+        // Check for live session
+        hasLiveSession = sessionsData.some(s => s.status === 'Running');
+        
+        // Update live indicator
+        const liveIndicator = document.getElementById('liveIndicator');
+        if (hasLiveSession) {
+          liveIndicator.classList.remove('hidden');
+        } else {
+          liveIndicator.classList.add('hidden');
+        }
+        
+        // Update statistics dengan database_faces dari response
+        updateStatistics(data.statistics || {}, data.database_faces || 0);
+        
+        // Update table
+        updateTable(currentFilter ? filterSessions(sessionsData, currentFilter) : sessionsData);
+        
+        // Update last update time
+        updateLastUpdateTime();
+        
+      } catch (error) {
+        console.error('Error loading sessions:', error);
+        showError('Gagal memuat data sesi');
+      }
+    }
+
+    function updateStatistics(stats, dbFaces) {
+      document.getElementById('totalSessions').textContent = stats.total_sessions || 0;
+      document.getElementById('totalVisitors').textContent = stats.total_visitors_all_time || 0;
+      document.getElementById('avgVisitors').textContent = stats.average_visitors_per_session || 0;
+      document.getElementById('avgDuration').textContent = stats.average_duration_minutes || 0;
+      document.getElementById('databaseFaces').textContent = dbFaces;
+    }
+
+    function updateLastUpdateTime() {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      document.getElementById('lastUpdate').textContent = `Update: ${timeStr}`;
+    }
+
+    function updateTable(sessions) {
+      const tbody = document.getElementById('sessionsTableBody');
+      
+      if (!sessions || sessions.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="9" class="px-6 py-12 text-center text-gray-500">
+              <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+              <p class="text-lg font-medium">Tidak ada data sesi</p>
+              <p class="text-sm text-gray-400 mt-2">Mulai deteksi untuk membuat sesi baru</p>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = sessions.map((session, index) => {
+        const statusClass = session.status === 'Selesai' ? 'status-selesai' : 
+                           session.status === 'Running' ? 'status-running' : 'status-gagal';
+        
+        // Highlight running session
+        const rowClass = session.status === 'Running' ? 'table-row bg-blue-50/50' : 'table-row';
+        
+        return `
+          <tr class="${rowClass}">
+            <td class="px-6 py-4 text-sm text-gray-900 font-medium">${index + 1}</td>
+            <td class="px-6 py-4 text-sm text-gray-900">${formatDate(session.date)}</td>
+            <td class="px-6 py-4 text-sm text-gray-900">${session.start_time}</td>
+            <td class="px-6 py-4 text-sm text-gray-900">${session.end_time || '<span class="text-blue-600 font-semibold">Sedang Berjalan</span>'}</td>
+            <td class="px-6 py-4 text-sm font-semibold ${session.status === 'Running' ? 'text-blue-600 animate-pulse' : 'text-blue-600'}">${session.total_visitors} Orang</td>
+            <td class="px-6 py-4 text-sm text-gray-600">${session.camera_location}</td>
+            <td class="px-6 py-4 text-sm text-gray-900">${session.duration_formatted}</td>
+            <td class="px-6 py-4">
+              <span class="status-badge ${statusClass}">
+                ${getStatusIcon(session.status)}
+                ${session.status}
+              </span>
+            </td>
+            <td class="px-6 py-4">
+              ${session.status !== 'Running' ? 
+                `<button onclick="deleteSession('${session.id}')" class="text-red-600 hover:text-red-800 font-medium text-sm">Hapus</button>` :
+                `<span class="text-gray-400 text-sm">Aktif</span>`
+              }
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function getStatusIcon(status) {
+      if (status === 'Selesai') {
+        return '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>';
+      } else if (status === 'Running') {
+        return '<svg class="w-4 h-4 animate-spin" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1z" clip-rule="evenodd"/></svg>';
+      } else {
+        return '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>';
+      }
+    }
+
+    function formatDate(dateStr) {
+      const [year, month, day] = dateStr.split('-');
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
+      return `${day} ${months[parseInt(month) - 1]} ${year}`;
+    }
+
+    function filterByDate() {
+      const dateInput = document.getElementById('dateFilter');
+      currentFilter = dateInput.value;
+      
+      if (currentFilter) {
+        const filtered = filterSessions(sessionsData, currentFilter);
+        updateTable(filtered);
+      } else {
+        updateTable(sessionsData);
+      }
+    }
+
+    function filterSessions(sessions, date) {
+      return sessions.filter(s => s.date === date);
+    }
+
+    function clearFilter() {
+      document.getElementById('dateFilter').value = '';
+      currentFilter = null;
+      updateTable(sessionsData);
+    }
+
+    function refreshData() {
+      loadSessionsData();
+      showNotification('Data berhasil diperbarui', 'success');
+    }
+
+    async function deleteSession(sessionId) {
+      if (!confirm('Yakin ingin menghapus sesi ini?')) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/sessions/${sessionId}`, {
+          method: 'DELETE'
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+          showNotification('Sesi berhasil dihapus', 'success');
+          loadSessionsData();
+        } else {
+          showNotification('Gagal menghapus sesi', 'error');
+        }
+      } catch (error) {
+        console.error('Error deleting session:', error);
+        showNotification('Terjadi kesalahan', 'error');
+      }
+    }
+
+    async function exportData() {
+      try {
+        const response = await fetch('/api/sessions/export');
+        const blob = await response.blob();
+        
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `data-pengunjung-${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        showNotification('Data berhasil diekspor', 'success');
+      } catch (error) {
+        console.error('Error exporting data:', error);
+        showNotification('Gagal mengekspor data', 'error');
+      }
+    }
+
+    function showNotification(message, type = 'info') {
+      const colors = {
+        success: 'bg-green-500',
+        error: 'bg-red-500',
+        info: 'bg-blue-500'
+      };
+
+      const notification = document.createElement('div');
+      notification.className = `fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-xl shadow-lg z-50 animate-bounce`;
+      notification.textContent = message;
+      
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        notification.remove();
+      }, 3000);
+    }
+
+    function showError(message) {
+      showNotification(message, 'error');
+    }
+  </script>
+</body>
+</html>
