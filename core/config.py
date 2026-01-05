@@ -1,11 +1,11 @@
 """
-Enhanced Configuration for Face Counter - Optimized Performance
+Enhanced Configuration for Face Counter - Optimized for 25 FPS
 """
 import os
 import cv2
 
 class Config:
-    """Application configuration for face detection with performance optimizations"""
+    """Application configuration for face detection with 25 FPS optimization"""
     
     # CCTV Settings
     CCTV_IP = "10.2.22.30"
@@ -34,51 +34,51 @@ class Config:
     
     # Face Detection Settings
     # Haar Cascade settings
-    HAAR_SCALE_FACTOR = 1.1  # Smaller = more accurate but slower
-    HAAR_MIN_NEIGHBORS = 6  # Higher = fewer false positives (increased)
-    HAAR_MIN_SIZE = (50, 50)  # Minimum face size (increased)
-    HAAR_MAX_SIZE = (400, 400)  # Maximum face size (prevent false positives)
+    HAAR_SCALE_FACTOR = 1.15  # Slightly larger for faster processing
+    HAAR_MIN_NEIGHBORS = 5  # Balanced for speed vs accuracy
+    HAAR_MIN_SIZE = (40, 40)  # Slightly smaller for better detection
+    HAAR_MAX_SIZE = (350, 350)
     
     # Validation Settings
-    ENABLE_EYE_VALIDATION = True  # Require eyes to be detected
-    ENABLE_SKIN_VALIDATION = True  # Check for skin-like colors
-    ENABLE_TEXTURE_VALIDATION = True  # Check texture variance
-    QUALITY_THRESHOLD = 0.5  # Minimum quality score (0.0 - 1.0)
-    MIN_CHECKS_PASSED = 0.4  # Minimum 40% of validation checks must pass
+    ENABLE_EYE_VALIDATION = True
+    ENABLE_SKIN_VALIDATION = True
+    ENABLE_TEXTURE_VALIDATION = True
+    QUALITY_THRESHOLD = 0.5
+    MIN_CHECKS_PASSED = 0.4
     
-    # DNN Face Detection settings (if using DNN model)
-    CONFIDENCE_THRESHOLD = 0.5  # Confidence threshold for DNN
-    DNN_INPUT_SIZE = (300, 300)  # Input size for DNN
+    # DNN Face Detection settings
+    CONFIDENCE_THRESHOLD = 0.5
+    DNN_INPUT_SIZE = (300, 300)
     
     # Tracking Settings
-    MAX_TRACKING_DISTANCE = 100  # Maximum distance to consider same face
-    FACE_TIMEOUT = 1.0  # Seconds before face ID expires
-    
-    # Frame Settings - Optimized for real-time
-    FRAME_WIDTH = 1280  # HD resolution
-    FRAME_HEIGHT = 720
-    JPEG_QUALITY = 80  # Balance quality and speed
-    TARGET_FPS = 30
+    MAX_TRACKING_DISTANCE = 100
+    FACE_TIMEOUT = 1.0
+
+    # Frame Settings - OPTIMIZED FOR 50 FPS
+    FRAME_WIDTH = 960  # Reduced from 1280 for better performance
+    FRAME_HEIGHT = 540  # Reduced from 720 for better performance
+    JPEG_QUALITY = 75  # Slightly lower for faster encoding
+    TARGET_FPS = 50  # Target 50 FPS
     
     # Performance Optimization
-    FRAME_SKIP = 0  # Process every frame (set to 1 to skip alternate frames)
-    MAX_BUFFER_SIZE = 2  # Small buffer for low latency
+    FRAME_SKIP = 0  # Process every frame
+    MAX_BUFFER_SIZE = 1  # Minimal buffer for lowest latency
     
     # Tracking Settings
-    TRACK_HISTORY_LENGTH = 40  # Longer trail
-    FPS_WINDOW_SIZE = 20  # Responsive FPS calculation
+    TRACK_HISTORY_LENGTH = 30  # Reduced for faster processing
+    FPS_WINDOW_SIZE = 15  # Faster FPS calculation
     
     # Storage Settings
     STATS_FILE = 'data/face_counter_stats.pkl'
     HISTORY_FILE = 'data/face_history.pkl'
     
-    # Network Settings for RTSP
-    RTSP_TRANSPORT = 'tcp'  # tcp or udp (tcp more reliable, udp lower latency)
-    RTSP_TIMEOUT = 5000  # milliseconds
-    RECONNECT_DELAY = 2  # seconds
+    # Network Settings for RTSP - OPTIMIZED FOR 25 FPS
+    RTSP_TRANSPORT = 'tcp'
+    RTSP_TIMEOUT = 3000  # Reduced timeout
+    RECONNECT_DELAY = 1  # Faster reconnect
     MAX_RECONNECT_ATTEMPTS = 3
     
-    # DNN Model Paths (optional - for better accuracy)
+    # DNN Model Paths
     DNN_PROTO = "deploy.prototxt"
     DNN_MODEL = "res10_300x300_ssd_iter_140000_fp16.caffemodel"
     
@@ -91,10 +91,10 @@ class Config:
     
     @staticmethod
     def get_optimized_cv2_settings():
-        """Get optimized OpenCV settings"""
+        """Get optimized OpenCV settings for 25 FPS"""
         return {
             cv2.CAP_PROP_BUFFERSIZE: 1,  # Minimal buffer
-            cv2.CAP_PROP_FPS: Config.TARGET_FPS,
+            cv2.CAP_PROP_FPS: 25,  # Target 25 FPS
             cv2.CAP_PROP_FOURCC: cv2.VideoWriter_fourcc(*'H264'),
             cv2.CAP_PROP_FRAME_WIDTH: Config.FRAME_WIDTH,
             cv2.CAP_PROP_FRAME_HEIGHT: Config.FRAME_HEIGHT
@@ -102,10 +102,7 @@ class Config:
     
     @staticmethod
     def download_dnn_models():
-        """
-        Download DNN models for better face detection accuracy
-        Run this once to download the models
-        """
+        """Download DNN models for better face detection accuracy"""
         import urllib.request
         
         proto_url = "https://raw.githubusercontent.com/opencv/opencv/master/samples/dnn/face_detector/deploy.prototxt"

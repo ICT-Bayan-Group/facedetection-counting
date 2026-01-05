@@ -1,5 +1,5 @@
 """
-Video stream handling utilities - PRODUCTION READY
+Video stream handling utilities - OPTIMIZED FOR 25 FPS
 """
 import cv2
 import os
@@ -7,7 +7,7 @@ import time
 import threading
 
 class VideoStreamHandler:
-    """Handles CCTV video stream connection with optimized settings"""
+    """Handles CCTV video stream connection with 25 FPS optimization"""
     
     def __init__(self, cctv_urls, user, password):
         self.cctv_urls = cctv_urls
@@ -17,9 +17,10 @@ class VideoStreamHandler:
         self.lock = threading.Lock()
         
         # Suppress OpenCV/FFmpeg verbose output
-        os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp'
+        os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp|buffer_size;1024000|max_delay;500000'
         os.environ['OPENCV_LOG_LEVEL'] = 'FATAL'
         os.environ['OPENCV_VIDEOIO_DEBUG'] = '0'
+        os.environ['OPENCV_FFMPEG_LOGLEVEL'] = '-8'
         
         try:
             cv2.setLogLevel(0)
@@ -28,14 +29,13 @@ class VideoStreamHandler:
     
     def connect(self):
         """
-        Try to connect to CCTV using multiple URL formats
+        Connect to CCTV with 25 FPS optimization
         Returns: cv2.VideoCapture object or None
         """
-        print("\n🎥 Connecting to CCTV...")
+        print("\n🎥 Connecting to CCTV (25 FPS mode)...")
         
         for idx, url in enumerate(self.cctv_urls, 1):
             try:
-                # Show safe URL (hide password)
                 url_display = url.replace(self.password, "***")
                 if len(url_display) > 70:
                     url_display = url_display[:67] + "..."
@@ -44,25 +44,33 @@ class VideoStreamHandler:
                 
                 start_time = time.time()
                 
-                # Create VideoCapture with FFmpeg backend
+                # Create VideoCapture with optimized settings
                 cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
                 
                 if not cap.isOpened():
                     print(f"      ❌ Cannot open stream")
                     continue
                 
-                # Set basic properties
-                cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)
-                cap.set(cv2.CAP_PROP_FPS, 30)
+                # OPTIMIZED SETTINGS FOR 50 FPS
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimal buffer
+                cap.set(cv2.CAP_PROP_FPS, 50)  # Target 50 FPS
+                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
                 
-                # Try to grab and read first frame
-                max_attempts = 3
+                # Try to set resolution (optional, let camera decide if fails)
+                try:
+                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)
+                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)
+                except:
+                    pass
+                
+                # Try to grab and read first frame with faster timeout
+                max_attempts = 2  # Reduced attempts
                 frame_valid = False
                 
                 for attempt in range(max_attempts):
                     grabbed = cap.grab()
                     if not grabbed:
-                        time.sleep(0.1)
+                        time.sleep(0.05)  # Shorter delay
                         continue
                     
                     ret, frame = cap.retrieve()
@@ -74,7 +82,8 @@ class VideoStreamHandler:
                 
                 if frame_valid:
                     height, width = frame.shape[:2]
-                    print(f"      ✅ Connected! Resolution: {width}x{height} ({elapsed:.1f}s)")
+                    actual_fps = cap.get(cv2.CAP_PROP_FPS)
+                    print(f"      ✅ Connected! {width}x{height} @ {actual_fps:.0f}fps ({elapsed:.1f}s)")
                     self.current_url = url
                     return cap
                 else:
@@ -101,11 +110,7 @@ class VideoStreamHandler:
     
     def reconnect(self, old_cap):
         """
-        Reconnect to CCTV stream
-        Args:
-            old_cap: Old VideoCapture object to release
-        Returns:
-            New VideoCapture object or None
+        Fast reconnect to CCTV stream
         """
         with self.lock:
             if old_cap is not None:
@@ -114,69 +119,48 @@ class VideoStreamHandler:
                 except:
                     pass
             
-            print("\n🔄 Attempting to reconnect...")
-            time.sleep(2)  # Brief delay before reconnect
+            print("\n🔄 Fast reconnecting...")
+            time.sleep(1)  # Shorter delay for faster recovery
             return self.connect()
     
     def is_valid_frame(self, frame):
-        """
-        Validate if frame is usable
-        Args:
-            frame: numpy array from VideoCapture.read()
-        Returns:
-            bool: True if frame is valid
-        """
+        """Validate if frame is usable"""
         if frame is None:
             return False
-        
         if not hasattr(frame, 'shape'):
             return False
-        
         if frame.size == 0:
             return False
-        
         if len(frame.shape) < 2:
             return False
-        
         if frame.shape[0] == 0 or frame.shape[1] == 0:
             return False
-        
         return True
     
     def optimize_capture(self, cap):
-        """
-        Apply optimized settings to VideoCapture
-        Args:
-            cap: cv2.VideoCapture object
-        """
+        """Apply 25 FPS optimized settings to VideoCapture"""
         if cap is None or not cap.isOpened():
             return
         
         try:
-            # Buffer settings for low latency
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
+            # Minimal buffer for low latency
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+            # Target 50 FPS
+            cap.set(cv2.CAP_PROP_FPS, 50)
             
-            # Frame rate
-            cap.set(cv2.CAP_PROP_FPS, 30)
-            
-            # Codec
+            # H264 codec
             cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
             
-            # Resolution (optional - let camera decide)
-            # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-            # cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+            # Optimized resolution
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)
             
         except Exception as e:
             print(f"⚠️  Warning: Could not apply all optimizations: {e}")
     
     def get_stream_info(self, cap):
-        """
-        Get stream information
-        Args:
-            cap: cv2.VideoCapture object
-        Returns:
-            dict: Stream properties or None
-        """
+        """Get stream information"""
         if cap is None or not cap.isOpened():
             return None
         
@@ -205,15 +189,8 @@ class VideoStreamHandler:
             print(f"⚠️  Could not retrieve stream info: {e}")
             return None
     
-    def test_url_quick(self, url, timeout=3):
-        """
-        Quick test if URL is accessible
-        Args:
-            url: RTSP URL to test
-            timeout: Timeout in seconds
-        Returns:
-            tuple: (success: bool, time_taken: float)
-        """
+    def test_url_quick(self, url, timeout=2):
+        """Quick test with shorter timeout"""
         start_time = time.time()
         
         try:
@@ -222,7 +199,6 @@ class VideoStreamHandler:
             if not cap.isOpened():
                 return False, time.time() - start_time
             
-            # Try to grab one frame
             success = cap.grab()
             elapsed = time.time() - start_time
             
@@ -234,12 +210,8 @@ class VideoStreamHandler:
             return False, time.time() - start_time
     
     def get_best_url(self):
-        """
-        Test all URLs and return the fastest working one
-        Returns:
-            str: Best URL or None
-        """
-        print("\n🔍 Testing all CCTV URLs to find fastest...")
+        """Test all URLs and return the fastest working one"""
+        print("\n🔍 Testing all CCTV URLs (fast mode)...")
         
         best_url = None
         best_time = float('inf')
@@ -248,7 +220,7 @@ class VideoStreamHandler:
             url_display = url.replace(self.password, "***")[:60]
             print(f"   [{idx}/{len(self.cctv_urls)}] {url_display}")
             
-            success, elapsed = self.test_url_quick(url, timeout=3)
+            success, elapsed = self.test_url_quick(url, timeout=2)
             
             if success:
                 print(f"      ✅ Working ({elapsed:.2f}s)")
@@ -265,16 +237,8 @@ class VideoStreamHandler:
             print("\n❌ No working URLs found")
             return None
     
-    def create_demo_stream(self, width=640, height=480, fps=30):
-        """
-        Create a demo video stream for testing
-        Args:
-            width: Frame width
-            height: Frame height
-            fps: Frames per second
-        Returns:
-            Generator yielding demo frames
-        """
+    def create_demo_stream(self, width=960, height=540, fps=50):
+        """Create a demo video stream at 50 FPS"""
         import numpy as np
         
         print(f"\n🎬 Starting DEMO mode ({width}x{height} @ {fps}fps)")
@@ -282,18 +246,21 @@ class VideoStreamHandler:
         
         frame_count = 0
         start_time = time.time()
+        frame_time = 1.0 / fps
         
         while True:
+            loop_start = time.time()
+            
             # Create colored frame with moving rectangle
             frame = np.zeros((height, width, 3), dtype=np.uint8)
-            frame[:, :] = (40, 40, 40)  # Dark gray background
+            frame[:, :] = (40, 40, 40)
             
             # Moving rectangle
             x = int((frame_count % 100) * width / 100)
             cv2.rectangle(frame, (x, height//3), (x+50, height*2//3), (0, 255, 0), -1)
             
             # Add text
-            cv2.putText(frame, "DEMO MODE - No CCTV Connected", 
+            cv2.putText(frame, "DEMO MODE - 25 FPS Target", 
                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             cv2.putText(frame, f"Frame: {frame_count}", 
                        (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
@@ -307,5 +274,7 @@ class VideoStreamHandler:
             
             yield frame
             
-            # Frame rate control
-            time.sleep(1.0 / fps)
+            # Precise frame rate control
+            elapsed = time.time() - loop_start
+            if elapsed < frame_time:
+                time.sleep(frame_time - elapsed)
