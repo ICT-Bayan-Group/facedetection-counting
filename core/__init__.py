@@ -2,6 +2,6 @@
 Core modules for Face Counter System
 """
 from .config import Config
-from .people_counter import FaceCounter
+from .face_counter import OpenVINOFaceCounter, FaceCounter
 
-__all__ = ['Config', 'FaceCounter']
+__all__ = ['Config', 'OpenVINOFaceCounter', 'FaceCounter']

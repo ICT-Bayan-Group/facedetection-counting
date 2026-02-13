@@ -1,86 +1,119 @@
 """
-Enhanced Configuration for Face Counter - Optimized for 25 FPS
+OpenVINO-Optimized Configuration - Untuk Intel GPU/NPU
+Mengurangi Beban CPU dengan OpenVINO Inference
 """
 import os
 import cv2
 
 class Config:
-    """Application configuration for face detection with 25 FPS optimization"""
+    """Konfigurasi optimasi OpenVINO untuk Intel GPU/NPU"""
     
-    # CCTV Settings
+    # ========================================
+    # OPENVINO & INFERENCE SETTINGS
+    # ========================================
+    USE_OPENVINO = True
+    OPENVINO_DEVICE = 'GPU'  # Options: 'CPU', 'GPU', 'MYRIAD', 'AUTO'
+    # 'GPU' = Intel integrated/discrete GPU
+    # 'MYRIAD' = Intel Neural Compute Stick
+    # 'AUTO' = Automatic device selection
+    
+    # Model paths for OpenVINO
+    FACE_DETECTION_MODEL_XML = 'models/face-detection-adas-0001.xml'
+    FACE_DETECTION_MODEL_BIN = 'models/face-detection-adas-0001.bin'
+    
+    # ========================================
+    # FRAME RATE OPTIMIZATION (PENTING!)
+    # ========================================
+    TARGET_FPS = 10  # TURUN DRASTIS dari 50 ke 10 FPS
+    STREAM_FPS = 5  # Stream output FPS
+    DETECTION_FPS = 5  # Detection hanya 5 FPS (skip banyak frame)
+    
+    FRAME_SKIP = 1  # Process setiap frame ke-2
+    
+    # Adaptive FPS
+    ENABLE_ADAPTIVE_FPS = True
+    MIN_FPS = 5
+    MAX_FPS = 15
+    
+    # ========================================
+    # RESOLUTION OPTIMIZATION (LEBIH KECIL!)
+    # ========================================
+    FRAME_WIDTH = 640   # Turun dari 960 ke 640
+    FRAME_HEIGHT = 360  # Turun dari 540 ke 360
+    
+    # Detection resolution (SANGAT KECIL untuk kecepatan)
+    DETECTION_WIDTH = 320
+    DETECTION_HEIGHT = 180
+    
+    JPEG_QUALITY = 80  # Turunkan quality untuk encoding lebih cepat
+    
+    # ========================================
+    # CCTV SETTINGS
+    # ========================================
     CCTV_IP = "10.2.22.30"
     CCTV_USER = "admin"
     CCTV_PASS = "ictb4y4n"
     
-    # Optimized CCTV URL Options (ordered by performance)
     CCTV_URLS = [
-        # Try TCP first for better reliability
+        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}/streaming/channels/102",  # Lower quality stream
         f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}/streaming/channels/101",
-        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}/streaming/channels/101",
-        # Then UDP for lower latency
         f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}:554/stream2",
-        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}:554/stream1",
-        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}/live",
-        # HTTP fallback
-        f"http://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}/video",
-        f"http://{CCTV_IP}/mjpeg.cgi"
     ]
     
-    # Flask Settings
+    # ========================================
+    # THREADING OPTIMIZATION
+    # ========================================
+    FRAME_QUEUE_SIZE = 1  # Minimal queue
+    RESULT_QUEUE_SIZE = 1
+    
+    # ========================================
+    # DETECTION OPTIMIZATION
+    # ========================================
+    # OpenVINO face detection thresholds
+    CONFIDENCE_THRESHOLD = 0.7  # Lebih tinggi = lebih cepat
+    
+    # Tracking
+    TRACK_HISTORY_LENGTH = 10  # Kurangi tracking history
+    MAX_TRACKING_DISTANCE = 100
+    FACE_TIMEOUT = 3.0
+    ID_TIMEOUT = 4.0
+    
+    # Cooldown
+    DETECTION_COOLDOWN = 5.0  # Detik
+    
+    # ========================================
+    # MEMORY OPTIMIZATION
+    # ========================================
+    MAX_EMBEDDING_HISTORY = 2  # Minimal embedding storage
+    MAX_QUALITY_HISTORY = 5
+    
+    ENABLE_AUTO_CLEANUP = True
+    CLEANUP_INTERVAL = 180  # 3 menit
+    
+    # ========================================
+    # FLASK SETTINGS
+    # ========================================
     HOST = '0.0.0.0'
     PORT = 5000
     DEBUG = False
     THREADED = True
     
-    # Face Detection Settings
-    # Haar Cascade settings
-    HAAR_SCALE_FACTOR = 1.15  # Slightly larger for faster processing
-    HAAR_MIN_NEIGHBORS = 5  # Balanced for speed vs accuracy
-    HAAR_MIN_SIZE = (40, 40)  # Slightly smaller for better detection
-    HAAR_MAX_SIZE = (350, 350)
-    
-    # Validation Settings
-    ENABLE_EYE_VALIDATION = True
-    ENABLE_SKIN_VALIDATION = True
-    ENABLE_TEXTURE_VALIDATION = True
-    QUALITY_THRESHOLD = 0.5
-    MIN_CHECKS_PASSED = 0.4
-    
-    # DNN Face Detection settings
-    CONFIDENCE_THRESHOLD = 0.5
-    DNN_INPUT_SIZE = (300, 300)
-    
-    # Tracking Settings
-    MAX_TRACKING_DISTANCE = 100
-    FACE_TIMEOUT = 1.0
-
-    # Frame Settings - OPTIMIZED FOR 50 FPS
-    FRAME_WIDTH = 960  # Reduced from 1280 for better performance
-    FRAME_HEIGHT = 540  # Reduced from 720 for better performance
-    JPEG_QUALITY = 75  # Slightly lower for faster encoding
-    TARGET_FPS = 50  # Target 50 FPS
-    
-    # Performance Optimization
-    FRAME_SKIP = 0  # Process every frame
-    MAX_BUFFER_SIZE = 1  # Minimal buffer for lowest latency
-    
-    # Tracking Settings
-    TRACK_HISTORY_LENGTH = 30  # Reduced for faster processing
-    FPS_WINDOW_SIZE = 15  # Faster FPS calculation
-    
-    # Storage Settings
+    # ========================================
+    # STORAGE SETTINGS
+    # ========================================
     STATS_FILE = 'data/face_counter_stats.pkl'
     HISTORY_FILE = 'data/face_history.pkl'
+    DATABASE_FILE = 'data/face_database.json'
+    SESSIONS_FILE = 'data/sessions.json'
     
-    # Network Settings for RTSP - OPTIMIZED FOR 25 FPS
+    # ========================================
+    # OPENCV OPTIMIZATION
+    # ========================================
+    MAX_BUFFER_SIZE = 1
     RTSP_TRANSPORT = 'tcp'
-    RTSP_TIMEOUT = 3000  # Reduced timeout
-    RECONNECT_DELAY = 1  # Faster reconnect
-    MAX_RECONNECT_ATTEMPTS = 3
-    
-    # DNN Model Paths
-    DNN_PROTO = "deploy.prototxt"
-    DNN_MODEL = "res10_300x300_ssd_iter_140000_fp16.caffemodel"
+    RTSP_TIMEOUT = 5000
+    RECONNECT_DELAY = 2
+    MAX_RECONNECT_ATTEMPTS = 5
     
     @staticmethod
     def init_directories():
@@ -88,45 +121,51 @@ class Config:
         os.makedirs('data', exist_ok=True)
         os.makedirs('templates', exist_ok=True)
         os.makedirs('static', exist_ok=True)
+        os.makedirs('models', exist_ok=True)
     
     @staticmethod
-    def get_optimized_cv2_settings():
-        """Get optimized OpenCV settings for 25 FPS"""
-        return {
-            cv2.CAP_PROP_BUFFERSIZE: 1,  # Minimal buffer
-            cv2.CAP_PROP_FPS: 25,  # Target 25 FPS
-            cv2.CAP_PROP_FOURCC: cv2.VideoWriter_fourcc(*'H264'),
-            cv2.CAP_PROP_FRAME_WIDTH: Config.FRAME_WIDTH,
-            cv2.CAP_PROP_FRAME_HEIGHT: Config.FRAME_HEIGHT
-        }
-    
-    @staticmethod
-    def download_dnn_models():
-        """Download DNN models for better face detection accuracy"""
+    def download_openvino_models():
+        """Download Intel OpenVINO face detection models"""
         import urllib.request
         
-        proto_url = "https://raw.githubusercontent.com/opencv/opencv/master/samples/dnn/face_detector/deploy.prototxt"
-        model_url = "https://github.com/opencv/opencv_3rdparty/raw/dnn_samples_face_detector_20170830/res10_300x300_ssd_iter_140000.caffemodel"
+        model_xml_url = "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2022.1/models_bin/3/face-detection-adas-0001/FP32/face-detection-adas-0001.xml"
+        model_bin_url = "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2022.1/models_bin/3/face-detection-adas-0001/FP32/face-detection-adas-0001.bin"
         
-        print("Downloading DNN face detection models...")
+        print("📥 Downloading OpenVINO face detection models...")
         
         try:
-            if not os.path.exists(Config.DNN_PROTO):
-                print(f"Downloading {Config.DNN_PROTO}...")
-                urllib.request.urlretrieve(proto_url, Config.DNN_PROTO)
-                print("✅ Proto file downloaded")
+            os.makedirs('models', exist_ok=True)
             
-            if not os.path.exists(Config.DNN_MODEL):
-                print(f"Downloading {Config.DNN_MODEL} (this may take a while)...")
-                urllib.request.urlretrieve(model_url, Config.DNN_MODEL)
-                print("✅ Model file downloaded")
+            if not os.path.exists(Config.FACE_DETECTION_MODEL_XML):
+                print(f"   Downloading XML model...")
+                urllib.request.urlretrieve(model_xml_url, Config.FACE_DETECTION_MODEL_XML)
+                print("   ✅ XML downloaded")
             
-            print("✅ All DNN models ready!")
+            if not os.path.exists(Config.FACE_DETECTION_MODEL_BIN):
+                print(f"   Downloading BIN model...")
+                urllib.request.urlretrieve(model_bin_url, Config.FACE_DETECTION_MODEL_BIN)
+                print("   ✅ BIN downloaded")
+            
+            print("✅ OpenVINO models ready!")
             return True
             
         except Exception as e:
             print(f"❌ Error downloading models: {e}")
-            print("💡 Tip: You can manually download from:")
-            print(f"   Proto: {proto_url}")
-            print(f"   Model: {model_url}")
+            print("\n💡 Manual download:")
+            print(f"   XML: {model_xml_url}")
+            print(f"   BIN: {model_bin_url}")
             return False
+    
+    @staticmethod
+    def print_config():
+        """Print configuration summary"""
+        print("\n" + "="*70)
+        print("⚙️  OPENVINO-OPTIMIZED CONFIGURATION")
+        print("="*70)
+        print(f"🎮 OpenVINO Device: {Config.OPENVINO_DEVICE}")
+        print(f"🎬 Stream FPS: {Config.STREAM_FPS}")
+        print(f"🔍 Detection FPS: {Config.DETECTION_FPS} (every ~{1/Config.DETECTION_FPS*Config.STREAM_FPS:.0f} frames)")
+        print(f"📐 Stream Resolution: {Config.FRAME_WIDTH}x{Config.FRAME_HEIGHT}")
+        print(f"🔍 Detection Size: {Config.DETECTION_WIDTH}x{Config.DETECTION_HEIGHT}")
+        print(f"⏭️  Frame Skip: {Config.FRAME_SKIP}")
+        print("="*70 + "\n")
