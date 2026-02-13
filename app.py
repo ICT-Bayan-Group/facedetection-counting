@@ -1,4 +1,8 @@
-from flask import Flask, render_template, Response, jsonify, request, send_file
+"""
+OpenVINO-Optimized Flask App
+Menghindari CPU Freeze dengan OpenVINO inference
+"""
+from flask import Flask, render_template, Response, jsonify, request
 from flask_cors import CORS
 import cv2
 import time
@@ -6,21 +10,20 @@ import os
 import sys
 import logging
 import threading
-import io
+import numpy as np
 
 # Disable verbose logging
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
 os.environ['OPENCV_LOG_LEVEL'] = 'FATAL'
-os.environ['OPENCV_VIDEOIO_DEBUG'] = '0'
-os.environ['OPENCV_FFMPEG_LOGLEVEL'] = '-8'
 
 import warnings
 warnings.filterwarnings('ignore')
 
-from core.people_counter import FaceCounter
+# Import OpenVINO optimized components
 from core.config import Config
+from core.face_counter import OpenVINOFaceCounter
 from utils.session_manager import SessionManager
 
 app = Flask(__name__)
@@ -35,13 +38,20 @@ current_session_active = False
 session_start_time = None
 
 def get_counter():
-    """Get or initialize face counter"""
+    """Get or initialize OpenVINO face counter"""
     global counter
     if counter is None:
-        print("🔄 Initializing face counter (25 FPS mode)...")
-        counter = FaceCounter(Config.CCTV_URLS, Config.CCTV_USER, Config.CCTV_PASS)
+        print("🔄 Initializing OpenVINO face counter...")
+        Config.print_config()
+        
+        counter = OpenVINOFaceCounter(
+            Config.CCTV_URLS, 
+            Config.CCTV_USER, 
+            Config.CCTV_PASS,
+            Config
+        )
         counter.start()
-        print("✅ Face counter started")
+        print("✅ OpenVINO face counter started")
     return counter
 
 def get_session_manager():
@@ -52,7 +62,7 @@ def get_session_manager():
     return session_manager
 
 def auto_start_session():
-    """Auto-start session ketika aplikasi dimulai"""
+    """Auto-start session"""
     global detection_enabled, current_session_active, session_start_time
     
     if not current_session_active and detection_enabled:
@@ -68,7 +78,7 @@ def ensure_stream_alive():
     
     while True:
         try:
-            time.sleep(8)  # Check more frequently
+            time.sleep(15)  # Check every 15 seconds
             
             if counter and counter.is_running:
                 if counter.cap is None or not counter.cap.isOpened():
@@ -79,11 +89,11 @@ def ensure_stream_alive():
                             print("✅ Stream reconnected")
                         except Exception as e:
                             print(f"❌ Reconnect failed: {e}")
-                            time.sleep(3)
+                            time.sleep(5)
                             
         except Exception as e:
             print(f"⚠️ Monitor error: {e}")
-            time.sleep(3)
+            time.sleep(5)
 
 # Start monitoring thread
 monitor_thread = threading.Thread(target=ensure_stream_alive, daemon=True)
@@ -101,124 +111,98 @@ def data_pengunjung():
 
 @app.route('/video_feed')
 def video_feed():
-    """Video streaming - OPTIMIZED FOR 25 FPS"""
+    """Video streaming - FIXED FPS CONTROL"""
     def generate():
         global detection_enabled, counter
         
         counter = get_counter()
         frame_count = 0
         error_count = 0
-        max_errors = 15
+        max_errors = 10
 
-        # Target 50 FPS = 20ms per frame
-        target_frame_time = 1.0 / 50.0  # 0.02 seconds = 20ms
+        # FIXED: Proper FPS timing
+        target_fps = Config.STREAM_FPS
+        target_frame_time = 1.0 / target_fps
+        last_log_time = time.time()
         last_frame_time = time.time()
         
-        print("📹 Client connected to video stream (50 FPS)")
+        print(f"📹 Client connected (target: {target_fps} FPS)")
         
         while True:
             try:
-                frame_start = time.time()
+                # CRITICAL: Wait for proper frame timing
+                current_time = time.time()
+                elapsed = current_time - last_frame_time
+                
+                if elapsed < target_frame_time:
+                    time.sleep(target_frame_time - elapsed)
+                    continue
+                
+                last_frame_time = time.time()
                 frame_count += 1
                 
                 if not detection_enabled:
-                    import numpy as np
-                    blank = np.zeros((540, 960, 3), dtype=np.uint8)
-                    
-                    for i in range(540):
-                        color = int(40 + (i / 540) * 30)
-                        blank[i, :] = (color, color, color)
+                    # Blank frame
+                    blank = np.zeros((Config.FRAME_HEIGHT, Config.FRAME_WIDTH, 3), dtype=np.uint8)
                     
                     cv2.putText(blank, "DETECTION PAUSED", 
-                              (280, 250), cv2.FONT_HERSHEY_DUPLEX, 
-                              1.3, (255, 200, 0), 3)
-                    cv2.putText(blank, "Click 'Start Detection' to resume", 
-                              (220, 300), cv2.FONT_HERSHEY_SIMPLEX, 
-                              0.8, (200, 200, 200), 2)
+                              (180, 180), cv2.FONT_HERSHEY_DUPLEX, 
+                              1.0, (255, 200, 0), 2)
                     
                     ret, buffer = cv2.imencode('.jpg', blank, [
-                        cv2.IMWRITE_JPEG_QUALITY, 75,
-                        cv2.IMWRITE_JPEG_OPTIMIZE, 1
+                        cv2.IMWRITE_JPEG_QUALITY, Config.JPEG_QUALITY
                     ])
                     
                     if ret:
-                        frame_bytes = buffer.tobytes()
                         yield (b'--frame\r\n'
                                b'Content-Type: image/jpeg\r\n\r\n' + 
-                               frame_bytes + b'\r\n')
-                    
-                    # Maintain 25 FPS timing
-                    elapsed = time.time() - frame_start
-                    if elapsed < target_frame_time:
-                        time.sleep(target_frame_time - elapsed)
+                               buffer.tobytes() + b'\r\n')
                     continue
                 
-                # Get frame with lock
+                # Get frame
                 with stream_lock:
                     frame = counter.get_frame()
                 
                 if frame is None or frame.size == 0:
                     error_count += 1
-                    
                     if error_count > max_errors:
-                        print(f"⚠️ Too many frame errors ({error_count}), reconnecting...")
                         with stream_lock:
                             try:
                                 counter._reconnect_stream()
                                 error_count = 0
                             except:
                                 pass
-                    
-                    time.sleep(0.04)  # Wait one frame time
                     continue
                 
                 error_count = 0
                 
-                # OPTIMIZED JPEG ENCODING FOR 25 FPS
+                # OPTIMIZED JPEG ENCODING
                 ret, buffer = cv2.imencode('.jpg', frame, [
-                    cv2.IMWRITE_JPEG_QUALITY, 75,  # Lower quality for speed
-                    cv2.IMWRITE_JPEG_OPTIMIZE, 1,
-                    cv2.IMWRITE_JPEG_PROGRESSIVE, 0  # Disable progressive for speed
+                    cv2.IMWRITE_JPEG_QUALITY, Config.JPEG_QUALITY,
+                    cv2.IMWRITE_JPEG_OPTIMIZE, 1
                 ])
                 
                 if not ret:
                     continue
                 
-                frame_bytes = buffer.tobytes()
-                
                 yield (b'--frame\r\n'
                        b'Content-Type: image/jpeg\r\n\r\n' + 
-                       frame_bytes + b'\r\n')
+                       buffer.tobytes() + b'\r\n')
                 
-                # PRECISE 25 FPS TIMING
-                elapsed = time.time() - frame_start
-                if elapsed < target_frame_time:
-                    sleep_time = target_frame_time - elapsed
-                    if sleep_time > 0:
-                        time.sleep(sleep_time)
-                
-                # Log actual FPS periodically
-                if frame_count % 250 == 0:  # Every 10 seconds
-                    actual_fps = 1.0 / (time.time() - last_frame_time) if (time.time() - last_frame_time) > 0 else 0
-                    print(f"📊 Stream FPS: {actual_fps:.1f} (target: 25)")
-                    last_frame_time = time.time()
+                # Log FPS periodically
+                if time.time() - last_log_time > 10:
+                    actual_fps = frame_count / (time.time() - last_log_time + frame_count * target_frame_time)
+                    print(f"📊 Stream FPS: {actual_fps:.1f} (target: {target_fps})")
+                    last_log_time = time.time()
+                    frame_count = 0
                 
             except GeneratorExit:
-                print("📹 Client disconnected from video stream")
+                print("📹 Client disconnected")
                 break
             except Exception as e:
                 error_count += 1
-                print(f"❌ Stream error #{error_count}: {e}")
-                
-                if error_count > max_errors:
-                    with stream_lock:
-                        try:
-                            counter._reconnect_stream()
-                            error_count = 0
-                        except:
-                            pass
-                
-                time.sleep(0.04)
+                print(f"❌ Stream error: {e}")
+                time.sleep(0.1)
     
     return Response(
         generate(),
@@ -227,14 +211,13 @@ def video_feed():
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
             'Expires': '0',
-            'Connection': 'keep-alive',
-            'X-Accel-Buffering': 'no'
+            'Connection': 'close'
         }
     )
 
 @app.route('/api/detection/toggle', methods=['POST'])
 def toggle_detection():
-    """Toggle face detection ON/OFF dengan session management"""
+    """Toggle detection"""
     global detection_enabled, current_session_active, session_start_time
     
     data = request.get_json()
@@ -251,289 +234,88 @@ def toggle_detection():
         session = sess_mgr.start_session(camera_location)
         current_session_active = True
         session_start_time = time.time()
-        print(f"🚀 Session started: {session['id']}")
     
     elif not detection_enabled and current_session_active:
         stats = counter.get_statistics()
-        total_visitors = stats.get('daily_total', 0)
-        max_concurrent = stats.get('max_count', 0)
-        
-        ended_session = sess_mgr.end_session(
-            total_visitors=total_visitors,
-            max_concurrent=max_concurrent,
+        sess_mgr.end_session(
+            total_visitors=stats.get('daily_total', 0),
+            max_concurrent=stats.get('max_count', 0),
             status='Selesai',
-            notes='Manual stop by user'
+            notes='Manual stop'
         )
         current_session_active = False
         session_start_time = None
-        
-        if ended_session:
-            print(f"✅ Session ended: {ended_session['id']}")
-    
-    status = "ENABLED" if detection_enabled else "DISABLED"
-    print(f"🎯 Face detection {status}")
     
     return jsonify({
         'success': True,
         'detection_enabled': detection_enabled,
-        'session_active': current_session_active,
-        'message': f'Face detection {status.lower()}'
+        'session_active': current_session_active
     })
-
-@app.route('/api/detection/status')
-def detection_status():
-    """Get current detection status"""
-    global detection_enabled, current_session_active, session_start_time
-    counter = get_counter()
-    sess_mgr = get_session_manager()
-    
-    current_session = sess_mgr.get_current_session()
-    
-    session_duration_seconds = 0
-    if session_start_time and current_session_active:
-        session_duration_seconds = int(time.time() - session_start_time)
-    
-    return jsonify({
-        'detection_enabled': detection_enabled,
-        'is_running': counter.is_running,
-        'stream_connected': counter.cap is not None and counter.cap.isOpened(),
-        'session_active': current_session_active,
-        'current_session': current_session,
-        'session_duration_seconds': session_duration_seconds
-    })
-
-@app.route('/api/stream/reconnect', methods=['POST'])
-def force_reconnect():
-    """Force reconnect stream"""
-    global counter
-    
-    try:
-        counter = get_counter()
-        print("🔄 Force reconnecting stream...")
-        
-        with stream_lock:
-            counter._reconnect_stream()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Stream reconnected successfully'
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'message': f'Reconnect failed: {str(e)}'
-        }), 500
 
 @app.route('/api/stats')
 def get_stats():
-    """Get current statistics"""
+    """Get statistics"""
     counter = get_counter()
-    sess_mgr = get_session_manager()
-    
     stats = counter.get_statistics()
-    current_session = sess_mgr.get_current_session()
-    session_visitors = current_session['total_visitors'] if current_session else 0
-    
-    if current_session_active and current_session:
-        session_visitors = stats.get('daily_total', 0)
-    
-    stats['database_faces'] = len(counter.face_db.faces)
-    stats['detection_enabled'] = detection_enabled
-    stats['session_active'] = current_session_active
-    stats['session_visitors'] = session_visitors
     
     return jsonify({
         'current_count': stats.get('current_count', 0),
         'max_count': stats.get('max_count', 0),
         'daily_total': stats.get('daily_total', 0),
-        'database_faces': stats.get('database_faces', 0),
+        'database_faces': stats.get('database_size', 0),
         'fps': stats.get('fps', 0),
-        'hourly_stats': stats.get('hourly_stats', {}),
-        'timestamp': stats.get('timestamp', ''),
         'processing_fps': stats.get('processing_fps', 0),
         'active_ids': stats.get('active_trackers', 0),
-        'current_faces': stats.get('current_faces', 0),
-        'detection_enabled': detection_enabled,
-        'session_active': current_session_active,
-        'session_visitors': session_visitors
+        'detection_enabled': detection_enabled
     })
+
+@app.route('/api/health')
+def health_check():
+    """Health check"""
+    counter = get_counter()
+    
+    return jsonify({
+        'status': 'ok',
+        'service': f'OpenVINO Face Counter - {Config.STREAM_FPS} FPS',
+        'running': counter.is_running,
+        'detector': counter.detector_type,
+        'fps': round(counter.fps, 1),
+        'detection_enabled': detection_enabled
+    })
+
+@app.route('/api/history')
+def get_history():
+    """Get historical data"""
+    counter = get_counter()
+    return jsonify(counter.get_historical_data())
+
+@app.route('/api/sessions', methods=['GET'])
+def get_sessions():
+    sess_mgr = get_session_manager()
+    sessions = sess_mgr.get_all_sessions()
+    return jsonify({'success': True, 'sessions': sessions})
 
 @app.route('/api/reset', methods=['POST'])
 def reset_stats():
     """Reset daily statistics"""
     counter = get_counter()
     counter.reset_daily_stats()
-    return jsonify({
-        'success': True, 
-        'message': 'Daily statistics reset successfully'
-    })
-
-# Session management endpoints (unchanged)
-@app.route('/api/sessions', methods=['GET'])
-def get_sessions():
-    try:
-        sess_mgr = get_session_manager()
-        counter = get_counter()
-        
-        limit = request.args.get('limit', type=int)
-        date_filter = request.args.get('date')
-        
-        sessions = sess_mgr.get_all_sessions(limit=limit, date_filter=date_filter)
-        statistics = sess_mgr.get_statistics()
-        
-        database_faces = len(counter.face_db.faces)
-        statistics['total_visitors_database'] = database_faces
-        
-        return jsonify({
-            'success': True,
-            'sessions': sessions,
-            'statistics': statistics,
-            'total': len(sessions),
-            'database_faces': database_faces
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-
-@app.route('/api/sessions/<session_id>', methods=['GET'])
-def get_session(session_id):
-    try:
-        sess_mgr = get_session_manager()
-        session = sess_mgr.get_session_by_id(session_id)
-        
-        if session:
-            return jsonify({'success': True, 'session': session})
-        else:
-            return jsonify({'success': False, 'message': 'Session not found'}), 404
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-
-@app.route('/api/sessions/<session_id>', methods=['DELETE'])
-def delete_session(session_id):
-    try:
-        sess_mgr = get_session_manager()
-        success = sess_mgr.delete_session(session_id)
-        
-        if success:
-            return jsonify({'success': True, 'message': 'Session deleted successfully'})
-        else:
-            return jsonify({'success': False, 'message': 'Session not found'}), 404
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-
-@app.route('/api/sessions/export', methods=['GET'])
-def export_sessions():
-    try:
-        sess_mgr = get_session_manager()
-        import csv
-        from io import StringIO
-        
-        output = StringIO()
-        sessions = sess_mgr.get_all_sessions()
-        
-        if not sessions:
-            return jsonify({'success': False, 'message': 'No sessions to export'}), 404
-        
-        fieldnames = ['No', 'Tanggal', 'Waktu Mulai', 'Waktu Selesai', 
-                     'Total Pengunjung', 'Lokasi/Kamera', 'Durasi', 'Status', 'Catatan']
-        
-        writer = csv.DictWriter(output, fieldnames=fieldnames)
-        writer.writeheader()
-        
-        for idx, session in enumerate(sessions, 1):
-            writer.writerow({
-                'No': idx,
-                'Tanggal': session.get('date', ''),
-                'Waktu Mulai': session.get('start_time', ''),
-                'Waktu Selesai': session.get('end_time', ''),
-                'Total Pengunjung': f"{session.get('total_visitors', 0)} Orang",
-                'Lokasi/Kamera': session.get('camera_location', ''),
-                'Durasi': session.get('duration_formatted', ''),
-                'Status': session.get('status', ''),
-                'Catatan': session.get('notes', '')
-            })
-        
-        output.seek(0)
-        
-        return Response(
-            output.getvalue(),
-            mimetype='text/csv',
-            headers={
-                'Content-Disposition': f'attachment; filename=data-pengunjung-{time.strftime("%Y%m%d")}.csv'
-            }
-        )
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
-
-@app.route('/api/health')
-def health_check():
-    """Health check endpoint"""
-    counter = get_counter()
-    sess_mgr = get_session_manager()
-    
-    return jsonify({
-        'status': 'ok',
-        'service': 'Face Counter CCTV - 50 FPS',
-        'running': counter.is_running,
-        'cctv_connected': counter.cap is not None and counter.cap.isOpened(),
-        'model': 'MTCNN + FaceNet',
-        'fps': round(counter.fps, 1),
-        'target_fps': 50,
-        'processing_fps': round(counter.processing_fps, 1),
-        'active_trackers': len(counter.face_trackers),
-        'detection_enabled': detection_enabled,
-        'session_active': current_session_active,
-        'total_sessions': len(sess_mgr.sessions),
-        'database_faces': len(counter.face_db.faces)
-    })
-
-@app.route('/api/history')
-def get_history():
-    counter = get_counter()
-    history = counter.get_historical_data()
-    if 'peak_hours' not in history:
-        history['peak_hours'] = []
-    return jsonify(history)
-
-@app.route('/api/database/stats')
-def get_database_stats():
-    counter = get_counter()
-    return jsonify(counter.get_database_stats())
-
-@app.route('/api/database/save', methods=['POST'])
-def save_database():
-    counter = get_counter()
-    counter.save_face_database()
-    return jsonify({
-        'success': True,
-        'message': 'Database saved',
-        'total_faces': len(counter.face_db.faces)
-    })
-
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({'error': 'Not found'}), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    return jsonify({'error': 'Internal server error'}), 500
+    return jsonify({'success': True, 'message': 'Statistics reset successfully'})
 
 if __name__ == '__main__':
     cli = sys.modules['flask.cli']
     cli.show_server_banner = lambda *x: None
     
     print("\n" + "="*70)
-    print("🚀 FACE COUNTER - 25 FPS OPTIMIZED")
+    print("🚀 OPENVINO FACE COUNTER")
     print("="*70)
     print(f"📹 CCTV: {Config.CCTV_IP}")
-    print(f"🎯 Model: MTCNN + FaceNet")
+    print(f"🎯 Detector: OpenVINO on {Config.OPENVINO_DEVICE}")
     print(f"📐 Resolution: {Config.FRAME_WIDTH}x{Config.FRAME_HEIGHT}")
-    print(f"🎬 Target FPS: 25")
-    print("✅ Auto-reconnect: ENABLED")
-    print("✅ Session tracking: ENABLED")
+    print(f"🎬 Stream FPS: {Config.STREAM_FPS}")
+    print(f"🔍 Detection FPS: {Config.DETECTION_FPS}")
     print("="*70)
     print(f"\n🌐 Dashboard: http://localhost:{Config.PORT}")
-    print(f"🌐 Data Pengunjung: http://localhost:{Config.PORT}/data-pengunjung")
-    print(f"🌐 Network: http://{Config.HOST}:{Config.PORT}")
     print("="*70)
     print("\n⚠️  Press Ctrl+C to stop\n")
     
@@ -550,21 +332,7 @@ if __name__ == '__main__':
             use_reloader=False
         )
     except KeyboardInterrupt:
-        print("\n\n⏸️  Stopping server...")
-        
-        if current_session_active and counter:
-            sess_mgr = get_session_manager()
-            stats = counter.get_statistics()
-            sess_mgr.end_session(
-                total_visitors=stats.get('daily_total', 0),
-                max_concurrent=stats.get('max_count', 0),
-                status='Selesai',
-                notes='System shutdown'
-            )
-            print("💾 Current session saved")
-        
+        print("\n\n⏸️  Stopping...")
         if counter:
             counter.stop()
-        
-        print("✅ Stopped")
-        print("👋 Goodbye!\n")
+        print("✅ Stopped\n")
