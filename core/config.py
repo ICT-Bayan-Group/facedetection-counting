@@ -35,8 +35,8 @@ class Config:
     # ========================================
     # FULL HD RESOLUTION!
     # ========================================
-    FRAME_WIDTH = 1280      # Full HD width
-    FRAME_HEIGHT = 720      # HD 720p
+    FRAME_WIDTH = 960      # Full HD width
+    FRAME_HEIGHT = 540      # HD 720p
     
     # Detection resolution - balanced for accuracy
     DETECTION_WIDTH = 640   # Higher resolution for better accuracy
