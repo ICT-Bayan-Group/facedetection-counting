@@ -39,8 +39,8 @@ class Config:
     FRAME_HEIGHT = 540      # HD 720p
     
     # Detection resolution - balanced for accuracy
-    DETECTION_WIDTH = 640   # Higher resolution for better accuracy
-    DETECTION_HEIGHT = 360
+    DETECTION_WIDTH = 320   # Higher resolution for better accuracy
+    DETECTION_HEIGHT = 320
     
     JPEG_QUALITY = 85       # High quality HD video
     
