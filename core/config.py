@@ -21,8 +21,8 @@ class Config:
     # ========================================
     # HD VIDEO STREAMING - 30 FPS!
     # ========================================
-    TARGET_FPS = 30         # High performance target
-    STREAM_FPS = 30         # Smooth 30 FPS streaming
+    TARGET_FPS = 10         # High performance target
+    STREAM_FPS = 10         # Smooth 30 FPS streaming
     DETECTION_FPS = 15      # Detect every 2 frames for accuracy
     
     FRAME_SKIP = 1
