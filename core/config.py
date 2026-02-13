@@ -47,7 +47,7 @@ class Config:
     # ========================================
     # CCTV SETTINGS
     # ========================================
-    CCTV_IP = "10.2.22.30"
+    CCTV_IP = "10.2.22.6"
     CCTV_USER = "admin"
     CCTV_PASS = "ictb4y4n"
     
