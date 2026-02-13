@@ -1,47 +1,48 @@
 """
-OpenVINO-Optimized Configuration - 20 FPS Smooth Streaming
+HD Face Detection Configuration - High Performance & Accuracy
+Full HD video with optimized AI detection
 """
 import os
 import cv2
 
 class Config:
-    """Konfigurasi optimasi untuk 20 FPS smooth streaming"""
+    """HD Configuration for high-quality face detection"""
     
     # ========================================
     # OPENVINO & INFERENCE SETTINGS
     # ========================================
     USE_OPENVINO = True
-    OPENVINO_DEVICE = 'CPU'  # Use CPU since GPU not available
+    OPENVINO_DEVICE = 'CPU'  # Use CPU (GPU requires OpenCL)
     
     # Model paths for OpenVINO
     FACE_DETECTION_MODEL_XML = 'models/face-detection-adas-0001.xml'
     FACE_DETECTION_MODEL_BIN = 'models/face-detection-adas-0001.bin'
     
     # ========================================
-    # FRAME RATE OPTIMIZATION - 20 FPS!
+    # HD VIDEO STREAMING - 30 FPS!
     # ========================================
-    TARGET_FPS = 25         # Target processing FPS
-    STREAM_FPS = 25         # Stream output 20 FPS (smooth!)
-    DETECTION_FPS = 10      # Detection setiap 2 frame (lebih cepat)
+    TARGET_FPS = 30         # High performance target
+    STREAM_FPS = 30         # Smooth 30 FPS streaming
+    DETECTION_FPS = 15      # Detect every 2 frames for accuracy
     
-    FRAME_SKIP = 1          # Process setiap frame
+    FRAME_SKIP = 1
     
-    # Adaptive FPS
-    ENABLE_ADAPTIVE_FPS = False  # Disable adaptive, use fixed 20 FPS
-    MIN_FPS = 20
-    MAX_FPS = 20
+    # Adaptive FPS disabled for consistent performance
+    ENABLE_ADAPTIVE_FPS = False
+    MIN_FPS = 25
+    MAX_FPS = 30
     
     # ========================================
-    # RESOLUTION OPTIMIZATION
+    # FULL HD RESOLUTION!
     # ========================================
-    FRAME_WIDTH = 1080       # Resolution cukup untuk 20 FPS
-    FRAME_HEIGHT = 720      
+    FRAME_WIDTH = 1280      # Full HD width
+    FRAME_HEIGHT = 720      # HD 720p
     
-    # Detection resolution (keep small for speed)
-    DETECTION_WIDTH = 320
-    DETECTION_HEIGHT = 180
+    # Detection resolution - balanced for accuracy
+    DETECTION_WIDTH = 640   # Higher resolution for better accuracy
+    DETECTION_HEIGHT = 360
     
-    JPEG_QUALITY = 75       # Quality sedang untuk balance speed/quality
+    JPEG_QUALITY = 85       # High quality HD video
     
     # ========================================
     # CCTV SETTINGS
@@ -50,40 +51,60 @@ class Config:
     CCTV_USER = "admin"
     CCTV_PASS = "ictb4y4n"
     
+    # Use highest quality stream (channel 101)
     CCTV_URLS = [
-        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}/streaming/channels/102",
-        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}/streaming/channels/101",
-        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}:554/stream2",
+        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}/streaming/channels/101",  # Main stream
+        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}/streaming/channels/102",  # Sub stream
+        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}:554/stream1",
     ]
     
     # ========================================
     # THREADING OPTIMIZATION
     # ========================================
-    FRAME_QUEUE_SIZE = 2    # Slightly bigger queue for smoother flow
-    RESULT_QUEUE_SIZE = 2
+    FRAME_QUEUE_SIZE = 3    # Bigger queue for smooth HD
+    RESULT_QUEUE_SIZE = 3
     
     # ========================================
-    # DETECTION OPTIMIZATION
+    # AI DETECTION OPTIMIZATION
     # ========================================
-    CONFIDENCE_THRESHOLD = 0.6  # Slightly lower for better detection
+    # Improved thresholds for accuracy
+    CONFIDENCE_THRESHOLD = 0.5  # Lower for better recall
+    MIN_FACE_SIZE = 40          # Minimum face size in pixels
+    MAX_FACE_SIZE = 500         # Maximum face size
     
-    # Tracking
-    TRACK_HISTORY_LENGTH = 15
-    MAX_TRACKING_DISTANCE = 100
-    FACE_TIMEOUT = 3.0
+    # Tracking - optimized for accuracy
+    TRACK_HISTORY_LENGTH = 20
+    MAX_TRACKING_DISTANCE = 150
+    FACE_TIMEOUT = 2.0
     ID_TIMEOUT = 5.0
     
     # Cooldown
-    DETECTION_COOLDOWN = 3.0  # Reduced cooldown
+    DETECTION_COOLDOWN = 2.0
+    
+    # ========================================
+    # DISPLAY SETTINGS
+    # ========================================
+    # Show only NEW detections (no tracking boxes)
+    SHOW_TRACKING_BOXES = False  # Hide white tracking boxes!
+    SHOW_NEW_ONLY = True         # Only show green boxes for new faces
+    SHOW_FACE_ID = True
+    SHOW_CONFIDENCE = True
+    
+    # Box styling
+    NEW_FACE_COLOR = (0, 255, 0)      # Green for new
+    TRACKING_COLOR = (100, 100, 100)   # Dark gray (won't show)
+    BOX_THICKNESS = 3
+    FONT_SCALE = 0.6
+    FONT_THICKNESS = 2
     
     # ========================================
     # MEMORY OPTIMIZATION
     # ========================================
-    MAX_EMBEDDING_HISTORY = 3
-    MAX_QUALITY_HISTORY = 5
+    MAX_EMBEDDING_HISTORY = 5
+    MAX_QUALITY_HISTORY = 10
     
     ENABLE_AUTO_CLEANUP = True
-    CLEANUP_INTERVAL = 300  # 5 menit
+    CLEANUP_INTERVAL = 300
     
     # ========================================
     # FLASK SETTINGS
@@ -104,9 +125,9 @@ class Config:
     # ========================================
     # OPENCV OPTIMIZATION
     # ========================================
-    MAX_BUFFER_SIZE = 2     # Slightly bigger buffer
+    MAX_BUFFER_SIZE = 3
     RTSP_TRANSPORT = 'tcp'
-    RTSP_TIMEOUT = 5000
+    RTSP_TIMEOUT = 10000
     RECONNECT_DELAY = 2
     MAX_RECONNECT_ATTEMPTS = 5
     
@@ -155,12 +176,13 @@ class Config:
     def print_config():
         """Print configuration summary"""
         print("\n" + "="*70)
-        print("⚙️  20 FPS SMOOTH STREAMING CONFIGURATION")
+        print("⚙️  HD FACE DETECTION - HIGH PERFORMANCE")
         print("="*70)
-        print(f"🎮 OpenVINO Device: {Config.OPENVINO_DEVICE}")
-        print(f"🎬 Stream FPS: {Config.STREAM_FPS} (SMOOTH!)")
-        print(f"🔍 Detection FPS: {Config.DETECTION_FPS} (every ~{Config.STREAM_FPS/Config.DETECTION_FPS:.0f} frames)")
-        print(f"📐 Stream Resolution: {Config.FRAME_WIDTH}x{Config.FRAME_HEIGHT}")
+        print(f"🎮 Device: {Config.OPENVINO_DEVICE}")
+        print(f"🎬 Stream: {Config.STREAM_FPS} FPS")
+        print(f"🔍 Detection: {Config.DETECTION_FPS} FPS")
+        print(f"📐 Resolution: {Config.FRAME_WIDTH}x{Config.FRAME_HEIGHT} (HD)")
         print(f"🔍 Detection Size: {Config.DETECTION_WIDTH}x{Config.DETECTION_HEIGHT}")
-        print(f"📊 JPEG Quality: {Config.JPEG_QUALITY}%")
+        print(f"📊 Quality: {Config.JPEG_QUALITY}%")
+        print(f"👁️  Display: {'NEW ONLY' if Config.SHOW_NEW_ONLY else 'ALL'}")
         print("="*70 + "\n")
