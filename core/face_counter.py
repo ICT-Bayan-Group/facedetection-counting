@@ -43,22 +43,24 @@ class OpenVINOFaceCounter:
     def __init__(self, cctv_urls, user, password, config):
         print("🔄 Initializing Improved OpenVINO Face Counter...")
         
+        # Core configuration
         self.config = config
         
-        # Initialize components
+        # Component initialization
         self.video_handler = VideoStreamHandler(cctv_urls, user, password)
         self.stats_manager = StatisticsManager()
         self.face_db = FaceDatabase()
         
         print(f"📊 Face Database: {len(self.face_db.faces)} known faces")
         
-        # Setup device (GPU if available)
+        # Device setup
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') if FACENET_AVAILABLE else None
         if self.device:
             print(f"🖥️  Device: {self.device}")
         
-        # Initialize FaceNet for embeddings
+        # FaceNet embedding system
         self.use_embeddings = False
+        self.resnet = None
         if FACENET_AVAILABLE:
             try:
                 self.resnet = InceptionResnetV1(pretrained='vggface2').eval().to(self.device)
@@ -68,49 +70,57 @@ class OpenVINOFaceCounter:
                 print(f"⚠️  FaceNet init failed: {e}")
                 self.use_embeddings = False
         
-        # Initialize OpenVINO detector
-        self._init_detector()
+        # Detection system initialization
+        self.detector_type = "Unknown"
+        self.use_openvino = False
+        self.ie = None
+        self.compiled_model = None
+        self.input_layer = None
+        self.output_layer = None
+        self.n = None
+        self.c = None
+        self.h = None
+        self.w = None
+        self.face_cascade = None
+        self.frontal_cascade = None
+        self.eye_cascade = None
         
-        # Initialize frontal face detector (untuk validasi)
+        self._init_detector()
         self._init_frontal_detector()
         
-        # Queues
+        # Threading queues
         self.frame_queue = Queue(maxsize=config.FRAME_QUEUE_SIZE)
         self.result_queue = Queue(maxsize=config.RESULT_QUEUE_SIZE)
         
-        # Enhanced tracking
+        # Tracking state
         self.track_history = defaultdict(lambda: deque(maxlen=config.TRACK_HISTORY_LENGTH))
         self.detected_ids = set()
         self.current_faces = []
         self.next_id = 0
-        self.face_trackers = {}  # {id: (cx, cy, timestamp, quality, embedding)}
+        self.face_trackers = {}
         
-        # Quality tracking
+        # Quality and embedding tracking
         self.face_quality_history = defaultdict(lambda: deque(maxlen=config.MAX_QUALITY_HISTORY))
         self.face_embeddings = {}
-        
-        # Detection cooldown
         self.detection_cooldown = {}
         
-        # State
+        # Video capture state
         self.frame = None
         self.is_running = False
         self.cap = None
         
-        # FPS tracking
+        # Performance metrics
         self.fps = 0
         self.processing_fps = 0
         self.frame_times = deque(maxlen=30)
         self.last_frame_time = time.time()
-        
-        # Frame counter
         self.frame_count = 0
         self.last_detection_time = 0
         
-        # Thresholds
-        self.confidence_threshold = 0.90  # Threshold tinggi untuk akurasi
-        self.embedding_threshold = 0.6    # Similarity threshold
-        self.frontal_threshold = 0.7      # Threshold untuk frontal face
+        # Detection thresholds
+        self.confidence_threshold = 0.90
+        self.embedding_threshold = 0.6
+        self.frontal_threshold = 0.7
         
         # Load saved data
         self.stats_manager.load_statistics()
@@ -178,7 +188,6 @@ class OpenVINOFaceCounter:
         print("🔄 Using OpenCV DNN as fallback...")
         
         try:
-            # Use Haar Cascade for CPU detection
             cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
             self.face_cascade = cv2.CascadeClassifier(cascade_path)
             
@@ -196,11 +205,9 @@ class OpenVINOFaceCounter:
     def _init_frontal_detector(self):
         """Initialize frontal face detector untuk validasi"""
         try:
-            # Load Haar Cascade untuk frontal face validation
             cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_alt2.xml'
             self.frontal_cascade = cv2.CascadeClassifier(cascade_path)
             
-            # Load eye cascade untuk validasi tambahan
             eye_cascade_path = cv2.data.haarcascades + 'haarcascade_eye.xml'
             self.eye_cascade = cv2.CascadeClassifier(eye_cascade_path)
             
@@ -263,7 +270,6 @@ class OpenVINOFaceCounter:
                 if not self.frame_queue.full():
                     ret, frame = self.cap.retrieve()
                     if ret and frame is not None and frame.size > 0:
-                        # Resize ke target resolution
                         frame = cv2.resize(
                             frame, 
                             (self.config.FRAME_WIDTH, self.config.FRAME_HEIGHT),
@@ -294,8 +300,6 @@ class OpenVINOFaceCounter:
                 self.frame_count += 1
                 
                 current_time = time.time()
-                
-                # Frame skipping
                 time_since_detection = current_time - self.last_detection_time
                 should_detect = time_since_detection >= detection_interval
                 
@@ -307,7 +311,6 @@ class OpenVINOFaceCounter:
                 # DETECTION
                 start_time = time.time()
                 
-                # Resize untuk detection
                 detection_frame = cv2.resize(
                     frame,
                     (self.config.DETECTION_WIDTH, self.config.DETECTION_HEIGHT),
@@ -320,7 +323,7 @@ class OpenVINOFaceCounter:
                 else:
                     faces = self._detect_faces_haar(detection_frame, frame)
                 
-                # Scale boxes kembali ke resolusi asli
+                # Scale boxes
                 scale_x = self.config.FRAME_WIDTH / self.config.DETECTION_WIDTH
                 scale_y = self.config.FRAME_HEIGHT / self.config.DETECTION_HEIGHT
                 
@@ -334,24 +337,20 @@ class OpenVINOFaceCounter:
                         int(box[3] * scale_y)
                     ]
                     
-                    # Validate frontal face
                     if self._is_frontal_face(frame, scaled_box):
                         face['box'] = scaled_box
                         
-                        # Extract embedding jika tersedia
                         if self.use_embeddings:
                             embedding = self._extract_embedding(frame, scaled_box)
                             face['embedding'] = embedding
                         
                         validated_faces.append(face)
                 
-                # Calculate processing FPS
                 process_time = time.time() - start_time
                 self.processing_fps = 1.0 / process_time if process_time > 0 else 0
                 
                 self.last_detection_time = current_time
                 
-                # Put result
                 if not self.result_queue.full():
                     self.result_queue.put((frame, validated_faces, current_time))
                 
@@ -364,9 +363,11 @@ class OpenVINOFaceCounter:
     def _detect_faces_openvino(self, detection_frame, original_frame):
         """Detect faces menggunakan OpenVINO"""
         try:
+            h, w = detection_frame.shape[:2]
+            
             # Prepare input
             input_frame = cv2.resize(detection_frame, (self.w, self.h))
-            input_frame = input_frame.transpose((2, 0, 1))  # HWC -> CHW
+            input_frame = input_frame.transpose((2, 0, 1))
             input_frame = np.expand_dims(input_frame, 0)
             
             # Run inference
@@ -374,9 +375,7 @@ class OpenVINOFaceCounter:
             detections = results[self.output_layer]
             
             faces = []
-            h, w = detection_frame.shape[:2]
             
-            # Process detections
             for detection in detections[0][0]:
                 confidence = float(detection[2])
                 
@@ -384,24 +383,22 @@ class OpenVINOFaceCounter:
                     continue
                 
                 # Get box coordinates
-                xmin = int(detection[3] * w)
-                ymin = int(detection[4] * h)
-                xmax = int(detection[5] * w)
-                ymax = int(detection[6] * h)
+                xmin = max(0, int(detection[3] * w))
+                ymin = max(0, int(detection[4] * h))
+                xmax = min(w, int(detection[5] * w))
+                ymax = min(h, int(detection[6] * h))
                 
-                # Validate box
                 box_w = xmax - xmin
                 box_h = ymax - ymin
                 
                 if box_w < 30 or box_h < 30:
                     continue
                 
-                # Advanced quality validation
                 quality_score = self._validate_face_quality(
                     detection_frame, xmin, ymin, box_w, box_h, confidence
                 )
                 
-                if quality_score < 0.6:  # Threshold lebih tinggi
+                if quality_score < 0.6:
                     continue
                 
                 faces.append({
@@ -426,7 +423,7 @@ class OpenVINOFaceCounter:
             boxes = self.face_cascade.detectMultiScale(
                 gray,
                 scaleFactor=1.1,
-                minNeighbors=5,  # Lebih tinggi untuk akurasi
+                minNeighbors=5,
                 minSize=(40, 40),
                 maxSize=(300, 300)
             )
@@ -452,21 +449,13 @@ class OpenVINOFaceCounter:
             return []
     
     def _is_frontal_face(self, frame, box):
-        """
-        Validate apakah wajah adalah frontal face (bukan samping)
-        Menggunakan multiple checks:
-        1. Eye detection (kedua mata harus terdeteksi)
-        2. Aspect ratio check
-        3. Frontal face cascade validation
-        """
+        """Validate frontal face menggunakan multiple checks"""
         x, y, w, h = box
         
-        # Validate bounds
         if x < 0 or y < 0 or x+w > frame.shape[1] or y+h > frame.shape[0]:
             return False
         
         try:
-            # Extract face region
             face_roi = frame[y:y+h, x:x+w]
             
             if face_roi.size == 0:
@@ -477,12 +466,12 @@ class OpenVINOFaceCounter:
             frontal_score = 0
             max_score = 3
             
-            # CHECK 1: Aspect ratio (frontal face biasanya lebih square)
+            # CHECK 1: Aspect ratio
             aspect_ratio = w / float(h)
-            if 0.75 < aspect_ratio < 1.25:  # Frontal face ratio
+            if 0.75 < aspect_ratio < 1.25:
                 frontal_score += 1
             
-            # CHECK 2: Eye detection (PENTING - kedua mata harus terlihat)
+            # CHECK 2: Eye detection
             if self.eye_cascade is not None:
                 eyes = self.eye_cascade.detectMultiScale(
                     gray_face,
@@ -492,17 +481,14 @@ class OpenVINOFaceCounter:
                     maxSize=(int(w*0.4), int(h*0.4))
                 )
                 
-                # Harus detect minimal 2 mata untuk frontal face
                 if len(eyes) >= 2:
                     frontal_score += 1
                     
-                    # Validasi posisi mata (harus sejajar horizontal)
                     if len(eyes) >= 2:
                         eye_centers = [(ex + ew//2, ey + eh//2) for (ex, ey, ew, eh) in eyes[:2]]
                         y_diff = abs(eye_centers[0][1] - eye_centers[1][1])
                         
-                        # Mata harus relatif sejajar (tidak miring)
-                        if y_diff < h * 0.15:  # Toleransi 15% dari tinggi wajah
+                        if y_diff < h * 0.15:
                             frontal_score += 0.5
             
             # CHECK 3: Frontal cascade validation
@@ -516,10 +502,8 @@ class OpenVINOFaceCounter:
                 if len(frontal_faces) > 0:
                     frontal_score += 0.5
             
-            # Hitung normalized score
             normalized_score = frontal_score / max_score
             
-            # Threshold: minimal 70% untuk dianggap frontal
             return normalized_score >= self.frontal_threshold
             
         except Exception as e:
@@ -527,10 +511,7 @@ class OpenVINOFaceCounter:
             return False
     
     def _validate_face_quality(self, frame, x, y, w, h, confidence):
-        """
-        Advanced face quality validation
-        Returns quality score (0.0 - 1.0)
-        """
+        """Advanced face quality validation"""
         score = 0.0
         checks_passed = 0
         total_checks = 0
@@ -559,11 +540,11 @@ class OpenVINOFaceCounter:
         face_area = w * h
         frame_area = frame.shape[0] * frame.shape[1]
         relative_size = face_area / frame_area
-        if 0.02 < relative_size < 0.5:  # 2% to 50% of frame
+        if 0.02 < relative_size < 0.5:
             score += 0.2
             checks_passed += 1
         
-        # CHECK 4: Position validation (not at edge)
+        # CHECK 4: Position validation
         total_checks += 1
         margin = 15
         if (x > margin and y > margin and 
@@ -579,17 +560,14 @@ class OpenVINOFaceCounter:
                 gray_roi = cv2.cvtColor(face_roi, cv2.COLOR_BGR2GRAY)
                 brightness = np.mean(gray_roi)
                 
-                # Brightness harus dalam range yang baik (tidak terlalu gelap/terang)
                 if 40 < brightness < 220:
                     score += 0.15
                     checks_passed += 1
         except:
             pass
         
-        # Normalize score
         normalized_score = min(1.0, score)
         
-        # Require at least 70% of checks to pass
         if checks_passed < total_checks * 0.7:
             return 0.0
         
@@ -603,11 +581,9 @@ class OpenVINOFaceCounter:
         try:
             x, y, w, h = box
             
-            # Validate bounds
             if x < 0 or y < 0 or x+w > frame.shape[1] or y+h > frame.shape[0]:
                 return None
             
-            # Crop face dengan margin
             margin = int(min(w, h) * 0.2)
             x1 = max(0, x - margin)
             y1 = max(0, y - margin)
@@ -619,19 +595,14 @@ class OpenVINOFaceCounter:
             if face_img.size == 0:
                 return None
             
-            # Convert to RGB and PIL
             face_rgb = cv2.cvtColor(face_img, cv2.COLOR_BGR2RGB)
             face_pil = Image.fromarray(face_rgb)
-            
-            # Resize to 160x160 (FaceNet input size)
             face_pil = face_pil.resize((160, 160), Image.LANCZOS)
             
-            # Convert to tensor
             face_array = np.array(face_pil).astype(np.float32)
             face_array = (face_array - 127.5) / 128.0
             face_tensor = torch.from_numpy(face_array).permute(2, 0, 1).to(self.device)
             
-            # Extract embedding
             with torch.no_grad():
                 embedding = self.resnet(face_tensor.unsqueeze(0))
             
@@ -657,16 +628,13 @@ class OpenVINOFaceCounter:
                 
                 current_time = time.time()
                 
-                # Track faces dengan database integration
                 tracked_faces = self._track_faces(faces, current_time)
                 self.current_faces = tracked_faces
                 
-                # Draw detections dengan color indicator
                 for box, face_id, quality, confidence, color_indicator in tracked_faces:
                     self._draw_detection(frame, box, face_id, quality, confidence, color_indicator)
                     self._draw_trail(frame, face_id)
                 
-                # Update stats
                 self.stats_manager.update(len(tracked_faces))
                 
                 self.frame = frame
@@ -687,10 +655,7 @@ class OpenVINOFaceCounter:
                 time.sleep(0.1)
     
     def _track_faces(self, faces, current_time):
-        """
-        Advanced face tracking dengan persistent database
-        Prevents double counting menggunakan face embeddings
-        """
+        """Advanced face tracking dengan persistent database"""
         MAX_DISTANCE = 100
         EMBEDDING_THRESHOLD = self.embedding_threshold
         
@@ -718,7 +683,7 @@ class OpenVINOFaceCounter:
             cx = x + w // 2
             cy = y + h // 2
             
-            # === STEP 1: Check database untuk known faces ===
+            # Check database untuk known faces
             is_known_face = False
             db_match_id = None
             db_similarity = 0
@@ -730,7 +695,7 @@ class OpenVINOFaceCounter:
                     is_known_face = True
                     print(f"🔍 Recognized known face: {db_match_id} (similarity: {db_similarity:.2f})")
             
-            # === STEP 2: Find best matching active tracker ===
+            # Find best matching active tracker
             best_id = None
             best_score = float('inf')
             
@@ -740,21 +705,17 @@ class OpenVINOFaceCounter:
                 
                 track_x, track_y, _, prev_quality, prev_embedding = tracker_data
                 
-                # Position distance
                 position_distance = np.sqrt((cx - track_x)**2 + (cy - track_y)**2)
                 
-                # Embedding similarity
                 embedding_similarity = 0.0
                 if embedding is not None and prev_embedding is not None:
                     try:
-                        # Normalize embeddings
                         emb1 = embedding / np.linalg.norm(embedding)
                         emb2 = prev_embedding / np.linalg.norm(prev_embedding)
                         embedding_similarity = np.dot(emb1, emb2)
                     except:
                         embedding_similarity = 0.0
                 
-                # Combined score
                 if self.use_embeddings and embedding is not None and prev_embedding is not None:
                     if embedding_similarity > EMBEDDING_THRESHOLD:
                         combined_score = position_distance * (1 - embedding_similarity)
@@ -767,7 +728,7 @@ class OpenVINOFaceCounter:
                     best_score = combined_score
                     best_id = fid
             
-            # === STEP 3: Assign ID ===
+            # Assign ID
             if best_id is not None and best_score < MAX_DISTANCE:
                 face_id = best_id
                 color_indicator = 'tracking'
@@ -776,18 +737,17 @@ class OpenVINOFaceCounter:
                 self.next_id += 1
                 color_indicator = 'new'
             
-            # === STEP 4: Update quality history ===
+            # Update quality history
             self.face_quality_history[face_id].append(quality)
             avg_quality = np.mean(list(self.face_quality_history[face_id]))
             
-            # Store embedding
             if embedding is not None:
                 self.face_embeddings[face_id] = embedding
             
-            # === STEP 5: Track only high quality faces ===
+            # Track only high quality faces
             if avg_quality > 0.6 and confidence > self.confidence_threshold:
                 
-                # === STEP 6: Database check - add only if truly new ===
+                # Database check
                 if embedding is not None:
                     is_new_face, matched_db_id, similarity = self.face_db.add_or_update_face(
                         str(face_id),
@@ -795,26 +755,22 @@ class OpenVINOFaceCounter:
                     )
                     
                     if is_new_face:
-                        # NEW FACE - add to unique counter
                         if face_id not in self.detected_ids:
                             self.detected_ids.add(face_id)
                             self.stats_manager.add_unique_person()
                             color_indicator = 'new'
                             print(f"✨ NEW UNIQUE FACE! ID: {face_id} | Confidence: {confidence:.2f} | Quality: {avg_quality:.2f} | Total: {self.stats_manager.total_detected}")
                     else:
-                        # KNOWN FACE - don't add to counter
                         color_indicator = 'known'
                         if face_id not in self.detected_ids:
                             self.detected_ids.add(face_id)
                         print(f"👤 Known face detected: {matched_db_id} (similarity: {similarity:.2f})")
                 else:
-                    # No embedding - fallback tracking
                     if face_id not in self.detected_ids:
                         self.detected_ids.add(face_id)
                         self.stats_manager.add_unique_person()
                         color_indicator = 'new'
                 
-                # Update tracker
                 self.face_trackers[face_id] = (
                     cx, cy, current_time, quality,
                     self.face_embeddings.get(face_id)
@@ -823,7 +779,6 @@ class OpenVINOFaceCounter:
                 
                 tracked_faces.append((box, face_id, quality, confidence, color_indicator))
                 
-                # Update track history
                 self.track_history[face_id].append((float(cx), float(cy)))
         
         return tracked_faces
@@ -834,19 +789,17 @@ class OpenVINOFaceCounter:
         
         # Color based on status
         if color_indicator == 'new':
-            color = (0, 255, 0)  # GREEN - New unique face
+            color = (0, 255, 0)
             label_text = "NEW FACE"
         elif color_indicator == 'known':
-            color = (255, 165, 0)  # ORANGE - Known face
+            color = (255, 165, 0)
             label_text = "KNOWN"
         else:
-            color = (200, 200, 200)  # GRAY - Tracking
+            color = (200, 200, 200)
             label_text = "TRACK"
         
-        # Draw rectangle
         cv2.rectangle(frame, (x, y), (x+w, y+h), color, 3)
         
-        # Label
         label = f"Face #{face_id} | {label_text} ({confidence:.0%})"
         
         (label_w, label_h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
@@ -855,7 +808,6 @@ class OpenVINOFaceCounter:
         cv2.putText(frame, label, (x+5, label_y-5),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
         
-        # Center point
         cx = x + w // 2
         cy = y + h // 2
         cv2.circle(frame, (cx, cy), 5, color, -1)
@@ -955,7 +907,6 @@ class OpenVINOFaceCounter:
         self.face_embeddings.clear()
         self.next_id = 0
         
-        # Save database
         self.face_db.save_database()
         
         print("🔄 Daily stats reset (face database preserved)")
