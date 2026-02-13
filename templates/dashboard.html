@@ -29,6 +29,10 @@
       transform: translateY(-2px);
       box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
     }
+    #videoFeed {
+      min-height: 360px;
+      background: #1e293b;
+    }
   </style>
 </head>
 <body class="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 min-h-screen">
@@ -46,7 +50,6 @@
         </div>
 
         <div class="flex items-center gap-3">
-          <!-- NEW: Navigation to Data Pengunjung -->
           <a href="/data-pengunjung" class="nav-link flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white font-semibold rounded-xl shadow-lg">
             <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
               <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
@@ -71,65 +74,6 @@
 
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     
-    <!-- Session Status Banner (NEW) 
-    <div id="sessionBanner" class="stat-card rounded-3xl p-4 border shadow-lg mb-6 hidden">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-teal-500 rounded-xl flex items-center justify-center">
-            <svg class="w-6 h-6 text-white animate-pulse" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
-            </svg>
-          </div>
-          <div>
-            <p class="text-sm font-medium text-gray-600">Active Session</p>
-            <p class="text-lg font-bold text-gray-900" id="sessionDuration">Started 0 minutes ago</p>
-          </div>
-        </div>
-        <div class="text-right">
-          <p class="text-sm text-gray-600">Current Visitors</p>
-          <p class="text-2xl font-bold text-blue-600" id="sessionVisitors">0</p>
-        </div>
-      </div>
-    </div>-->
-
-    <!-- Control Panel 
-    <div class="stat-card rounded-3xl p-6 border shadow-lg mb-8">
-      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
-        <div class="flex items-center gap-4">
-          <div class="w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-2xl flex items-center justify-center">
-            <svg class="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/>
-            </svg>
-          </div>
-          <div>
-            <h2 class="text-xl font-bold text-gray-900">Detection Control</h2>
-            <p class="text-sm text-gray-500" id="detectionStatus">Face detection is active</p>
-          </div>
-        </div>
-
-        <div class="flex gap-3">
-          <button 
-            onclick="toggleDetection()" 
-            id="toggleBtn"
-            class="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold rounded-xl shadow-lg transition-all">
-            <svg id="toggleIcon" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
-            </svg>
-            <span id="toggleText">Pause Detection</span>
-          </button>
-
-          <button 
-            onclick="reconnectStream()" 
-            class="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg transition-all">
-            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
-            </svg>
-            Reconnect
-          </button>
-        </div>
-      </div>
-    </div>-->
-
     <!-- Stats Grid -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
       <div class="stat-card rounded-3xl p-6 border shadow-lg">
@@ -185,11 +129,12 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
       <div class="lg:col-span-2">
         <div class="stat-card rounded-3xl overflow-hidden border shadow-lg">
-          <div class="bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-4">
+          <div class="bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-4 flex items-center justify-between">
             <h2 class="text-lg font-semibold text-white">Live Camera Feed</h2>
+            <div id="videoStatus" class="text-sm text-gray-400">Loading...</div>
           </div>
           <div class="relative bg-slate-900">
-            <img id="videoFeed" src="/video_feed" alt="CCTV Feed" class="w-full h-auto" />
+            <img id="videoFeed" alt="CCTV Feed" class="w-full h-auto" />
           </div>
         </div>
       </div>
@@ -233,6 +178,46 @@
     let detectionEnabled = true;
     let sessionActive = false;
     let sessionStartTime = null;
+    let videoRetryCount = 0;
+    const MAX_VIDEO_RETRIES = 5;
+
+    // Video feed management
+    function initVideoFeed() {
+      const videoFeed = document.getElementById('videoFeed');
+      const videoStatus = document.getElementById('videoStatus');
+      
+      const updateVideoSrc = () => {
+        const timestamp = new Date().getTime();
+        videoFeed.src = `/video_feed?t=${timestamp}`;
+        videoStatus.textContent = 'Connecting...';
+        console.log('🎥 Loading video feed...');
+      };
+      
+      videoFeed.addEventListener('load', () => {
+        console.log('✅ Video feed loaded successfully');
+        videoStatus.textContent = 'Connected';
+        videoStatus.className = 'text-sm text-green-400';
+        videoRetryCount = 0;
+      });
+      
+      videoFeed.addEventListener('error', (e) => {
+        console.error('❌ Video feed error:', e);
+        videoStatus.textContent = 'Connection error';
+        videoStatus.className = 'text-sm text-red-400';
+        
+        if (videoRetryCount < MAX_VIDEO_RETRIES) {
+          videoRetryCount++;
+          console.log(`🔄 Retrying... (${videoRetryCount}/${MAX_VIDEO_RETRIES})`);
+          setTimeout(updateVideoSrc, 2000);
+        } else {
+          videoStatus.textContent = 'Failed to connect';
+          console.error('❌ Max retries reached');
+        }
+      });
+      
+      // Initial load
+      updateVideoSrc();
+    }
 
     function initChart() {
       const ctx = document.getElementById('hourlyChart').getContext('2d');
@@ -262,98 +247,6 @@
       });
     }
 
-    async function toggleDetection() {
-      const btn = document.getElementById('toggleBtn');
-      btn.disabled = true;
-      
-      try {
-        const res = await fetch('/api/detection/toggle', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({enabled: !detectionEnabled})
-        });
-        
-        const data = await res.json();
-        detectionEnabled = data.detection_enabled;
-        sessionActive = data.session_active;
-        
-        if (sessionActive) {
-          sessionStartTime = Date.now();
-          showSessionBanner();
-        } else {
-          hideSessionBanner();
-        }
-        
-        updateDetectionUI();
-      } catch (e) {
-        alert('Failed to toggle detection');
-      } finally {
-        btn.disabled = false;
-      }
-    }
-
-    function showSessionBanner() {
-      document.getElementById('sessionBanner').classList.remove('hidden');
-      updateSessionDuration();
-      setInterval(updateSessionDuration, 60000); // Update every minute
-    }
-
-    function hideSessionBanner() {
-      document.getElementById('sessionBanner').classList.add('hidden');
-      sessionStartTime = null;
-    }
-
-    function updateSessionDuration() {
-      if (!sessionStartTime) return;
-      
-      const elapsed = Math.floor((Date.now() - sessionStartTime) / 60000); // minutes
-      const hours = Math.floor(elapsed / 60);
-      const mins = elapsed % 60;
-      
-      let text = '';
-      if (hours > 0) {
-        text = `Started ${hours} hour${hours > 1 ? 's' : ''} ${mins} minute${mins > 1 ? 's' : ''} ago`;
-      } else {
-        text = `Started ${mins} minute${mins > 1 ? 's' : ''} ago`;
-      }
-      
-      document.getElementById('sessionDuration').textContent = text;
-    }
-
-    function updateDetectionUI() {
-      const badge = document.getElementById('detectionBadge');
-      const status = document.getElementById('detectionStatus');
-      const btn = document.getElementById('toggleBtn');
-      const icon = document.getElementById('toggleIcon');
-      const text = document.getElementById('toggleText');
-      
-      if (detectionEnabled) {
-        badge.className = 'flex items-center gap-2 px-4 py-2 bg-emerald-50 rounded-full border border-emerald-200';
-        badge.innerHTML = '<span class="w-2 h-2 bg-emerald-500 rounded-full pulse-dot"></span><span class="text-sm font-medium text-emerald-700">Detecting</span>';
-        status.textContent = 'Face detection is active';
-        btn.className = 'flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-semibold rounded-xl shadow-lg transition-all';
-        icon.innerHTML = '<path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>';
-        text.textContent = 'Pause Detection';
-      } else {
-        badge.className = 'flex items-center gap-2 px-4 py-2 bg-amber-50 rounded-full border border-amber-200';
-        badge.innerHTML = '<span class="w-2 h-2 bg-amber-500 rounded-full"></span><span class="text-sm font-medium text-amber-700">Paused</span>';
-        status.textContent = 'Detection is paused';
-        btn.className = 'flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold rounded-xl shadow-lg transition-all';
-        icon.innerHTML = '<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/>';
-        text.textContent = 'Start Detection';
-      }
-    }
-
-    async function reconnectStream() {
-      try {
-        const res = await fetch('/api/stream/reconnect', {method: 'POST'});
-        const data = await res.json();
-        alert(data.message);
-      } catch {
-        alert('Reconnect failed');
-      }
-    }
-
     function updateStats() {
       fetch('/api/stats')
         .then(r => r.json())
@@ -363,21 +256,6 @@
           document.getElementById('dailyTotal').textContent = data.daily_total || 0;
           document.getElementById('fps').textContent = (data.fps || 0).toFixed(1);
           
-          // Update session banner
-          if (sessionActive) {
-            document.getElementById('sessionVisitors').textContent = data.daily_total || 0;
-          }
-          
-          detectionEnabled = data.detection_enabled;
-          sessionActive = data.session_active;
-          
-          if (sessionActive && !sessionStartTime) {
-            sessionStartTime = Date.now();
-            showSessionBanner();
-          }
-          
-          updateDetectionUI();
-          
           const hourlyData = Array(24).fill(0);
           if (data.hourly_stats) {
             Object.entries(data.hourly_stats).forEach(([hour, count]) => {
@@ -386,11 +264,13 @@
           }
           hourlyChart.data.datasets[0].data = hourlyData;
           hourlyChart.update('none');
-        });
+        })
+        .catch(e => console.error('Stats error:', e));
 
       fetch('/api/history')
         .then(r => r.json())
-        .then(data => updatePeakHours(data.peak_hours || []));
+        .then(data => updatePeakHours(data.peak_hours || []))
+        .catch(e => console.error('History error:', e));
     }
 
     function updatePeakHours(peakHours) {
@@ -442,14 +322,17 @@
       fetch('/api/health')
         .then(r => r.json())
         .then(data => {
-          alert(`Status: ${data.status}\nCCTV: ${data.cctv_connected ? 'Connected' : 'Disconnected'}\nFPS: ${data.fps}\nDetection: ${data.detection_enabled ? 'ON' : 'OFF'}\nSession: ${data.session_active ? 'Active' : 'Inactive'}`);
+          alert(`Status: ${data.status}\nService: ${data.service}\nDetector: ${data.detector}\nFPS: ${data.fps}\nRunning: ${data.running}`);
         });
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+      console.log('🚀 Dashboard initializing...');
+      initVideoFeed();
       initChart();
       updateStats();
       setInterval(updateStats, 1000);
+      console.log('✅ Dashboard ready');
     });
   </script>
 </body>
