@@ -29,8 +29,8 @@ class Config:
     
     # Adaptive FPS disabled for consistent performance
     ENABLE_ADAPTIVE_FPS = False
-    MIN_FPS = 25
-    MAX_FPS = 30
+    MIN_FPS = 50
+    MAX_FPS = 50
     
     # ========================================
     # FULL HD RESOLUTION!
@@ -39,8 +39,8 @@ class Config:
     FRAME_HEIGHT = 540      # HD 720p
     
     # Detection resolution - balanced for accuracy
-    DETECTION_WIDTH = 640   # Higher resolution for better accuracy
-    DETECTION_HEIGHT = 360
+    DETECTION_WIDTH = 940   # Higher resolution for better accuracy
+    DETECTION_HEIGHT = 460
     
     JPEG_QUALITY = 85       # High quality HD video
    
@@ -48,7 +48,7 @@ class Config:
     # ========================================
     # CCTV SETTINGS
     # ========================================
-    CCTV_IP = "10.2.22.6"
+    CCTV_IP = "10.2.22.39"
     CCTV_USER = "admin"
     CCTV_PASS = "ictb4y4n"
     
