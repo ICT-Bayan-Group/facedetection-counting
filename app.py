@@ -1,338 +1,518 @@
 """
-OpenVINO-Optimized Flask App
-Menghindari CPU Freeze dengan OpenVINO inference
+Flask App — OpenVINO Face Counter
+Lengkap dengan Public API + SSE real-time untuk wajah baru.
 """
-from flask import Flask, render_template, Response, jsonify, request
+from flask import Flask, render_template, Response, jsonify, request, stream_with_context
 from flask_cors import CORS
-import cv2
-import time
-import os
-import sys
-import logging
-import threading
+import cv2, time, os, sys, logging, threading, json, io, csv
 import numpy as np
-
-# Disable verbose logging
+import socket
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
-
 os.environ['OPENCV_LOG_LEVEL'] = 'FATAL'
+import warnings; warnings.filterwarnings('ignore')
 
-import warnings
-warnings.filterwarnings('ignore')
-
-# Import OpenVINO optimized components
 from core.config import Config
 from core.face_counter import OpenVINOFaceCounter
 from utils.session_manager import SessionManager
 
-app = Flask(__name__)
+app  = Flask(__name__)
 CORS(app)
 
-# Global state
-counter = None
-session_manager = None
-detection_enabled = True
-stream_lock = threading.Lock()
+# ─────────────────────────────────────────────────────────────────────────────
+# GLOBAL STATE
+# ─────────────────────────────────────────────────────────────────────────────
+
+counter              = None
+session_manager      = None
+detection_enabled    = True
+stream_lock          = threading.Lock()
 current_session_active = False
-session_start_time = None
+session_start_time   = None
+
+# SSE subscribers — set of queue-like lists
+_sse_clients: list[list] = []
+_sse_lock = threading.Lock()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SSE HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _broadcast_sse(event: str, data: dict):
+    """Push event ke semua SSE client yang sedang connect."""
+    payload = f"event: {event}\ndata: {json.dumps(data)}\n\n"
+    with _sse_lock:
+        for q in list(_sse_clients):
+            q.append(payload)
+
+
+def _on_new_face(face_id: str, meta: dict):
+    """Dipanggil FaceDatabase saat wajah baru masuk."""
+    _broadcast_sse('new_face', {
+        'face_id':         face_id,
+        'first_seen':      meta.get('first_seen'),
+        'total_in_db':     meta.get('total_in_db'),
+        'detection_count': meta.get('detection_count', 1),
+    })
+
+
+def _on_face_updated(face_id: str, meta: dict):
+    """Dipanggil FaceDatabase saat wajah existing diupdate."""
+    _broadcast_sse('face_updated', {
+        'face_id':         face_id,
+        'last_seen':       meta.get('last_seen'),
+        'detection_count': meta.get('detection_count'),
+    })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# INIT
+# ─────────────────────────────────────────────────────────────────────────────
 
 def get_counter():
-    """Get or initialize OpenVINO face counter"""
     global counter
     if counter is None:
-        print("🔄 Initializing OpenVINO face counter...")
         Config.print_config()
-        
-        counter = OpenVINOFaceCounter(
-            Config.CCTV_URLS, 
-            Config.CCTV_USER, 
-            Config.CCTV_PASS,
-            Config
-        )
+        counter = OpenVINOFaceCounter(Config.CCTV_URLS, Config.CCTV_USER, Config.CCTV_PASS, Config)
+        # Daftarkan SSE callbacks ke face_db
+        counter.face_db.register_callback('new_face',      _on_new_face)
+        counter.face_db.register_callback('face_updated',  _on_face_updated)
         counter.start()
-        print("✅ OpenVINO face counter started")
+        print("✅ Face counter started")
     return counter
 
+
 def get_session_manager():
-    """Get or initialize session manager"""
     global session_manager
     if session_manager is None:
         session_manager = SessionManager()
     return session_manager
 
+
 def auto_start_session():
-    """Auto-start session"""
     global detection_enabled, current_session_active, session_start_time
-    
     if not current_session_active and detection_enabled:
-        sess_mgr = get_session_manager()
-        session = sess_mgr.start_session("CCTV Hall A")
+        sess = get_session_manager().start_session("CCTV Hall A")
         current_session_active = True
         session_start_time = time.time()
-        print(f"🚀 Auto-started session: {session['id']}")
+        print(f"🚀 Auto-started session: {sess['id']}")
+
 
 def ensure_stream_alive():
-    """Background task untuk ensure stream tetap hidup"""
     global counter
-    
     while True:
         try:
-            time.sleep(15)  # Check every 15 seconds
-            
+            time.sleep(15)
             if counter and counter.is_running:
                 if counter.cap is None or not counter.cap.isOpened():
                     print("⚠️ Stream not healthy, reconnecting...")
                     with stream_lock:
-                        try:
-                            counter._reconnect_stream()
-                            print("✅ Stream reconnected")
-                        except Exception as e:
-                            print(f"❌ Reconnect failed: {e}")
-                            time.sleep(5)
-                            
+                        counter._reconnect()
         except Exception as e:
             print(f"⚠️ Monitor error: {e}")
             time.sleep(5)
 
-# Start monitoring thread
-monitor_thread = threading.Thread(target=ensure_stream_alive, daemon=True)
-monitor_thread.start()
+threading.Thread(target=ensure_stream_alive, daemon=True).start()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PAGES
+# ─────────────────────────────────────────────────────────────────────────────
 
 @app.route('/')
 def index():
-    """Main dashboard page"""
     return render_template('dashboard.html')
 
 @app.route('/data-pengunjung')
 def data_pengunjung():
-    """Halaman Data Pengunjung"""
     return render_template('data_pengunjung.html')
+
+# ─────────────────────────────────────────────────────────────────────────────
+# VIDEO STREAM
+# ─────────────────────────────────────────────────────────────────────────────
 
 @app.route('/video_feed')
 def video_feed():
-    """Video streaming - FIXED FPS CONTROL"""
     def generate():
-        global detection_enabled, counter
-        
-        counter = get_counter()
-        frame_count = 0
-        error_count = 0
-        max_errors = 10
+        c = get_counter()
+        target_frame_time = 1.0 / Config.STREAM_FPS
+        last_frame_time   = time.time()
+        error_count       = 0
 
-        # FIXED: Proper FPS timing
-        target_fps = Config.STREAM_FPS
-        target_frame_time = 1.0 / target_fps
-        last_log_time = time.time()
-        last_frame_time = time.time()
-        
-        print(f"📹 Client connected (target: {target_fps} FPS)")
-        
         while True:
             try:
-                # CRITICAL: Wait for proper frame timing
-                current_time = time.time()
-                elapsed = current_time - last_frame_time
-                
+                elapsed = time.time() - last_frame_time
                 if elapsed < target_frame_time:
                     time.sleep(target_frame_time - elapsed)
                     continue
-                
                 last_frame_time = time.time()
-                frame_count += 1
-                
+
                 if not detection_enabled:
-                    # Blank frame
                     blank = np.zeros((Config.FRAME_HEIGHT, Config.FRAME_WIDTH, 3), dtype=np.uint8)
-                    
-                    cv2.putText(blank, "DETECTION PAUSED", 
-                              (180, 180), cv2.FONT_HERSHEY_DUPLEX, 
-                              1.0, (255, 200, 0), 2)
-                    
-                    ret, buffer = cv2.imencode('.jpg', blank, [
-                        cv2.IMWRITE_JPEG_QUALITY, Config.JPEG_QUALITY
-                    ])
-                    
+                    cv2.putText(blank, "DETECTION PAUSED",
+                                (180, 180), cv2.FONT_HERSHEY_DUPLEX, 1.0, (255, 200, 0), 2)
+                    ret, buf = cv2.imencode('.jpg', blank, [cv2.IMWRITE_JPEG_QUALITY, Config.JPEG_QUALITY])
                     if ret:
-                        yield (b'--frame\r\n'
-                               b'Content-Type: image/jpeg\r\n\r\n' + 
-                               buffer.tobytes() + b'\r\n')
+                        yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n'
                     continue
-                
-                # Get frame
+
                 with stream_lock:
-                    frame = counter.get_frame()
-                
+                    frame = c.get_frame()
+
                 if frame is None or frame.size == 0:
                     error_count += 1
-                    if error_count > max_errors:
-                        with stream_lock:
-                            try:
-                                counter._reconnect_stream()
-                                error_count = 0
-                            except:
-                                pass
+                    if error_count > 10:
+                        with stream_lock: c._reconnect()
+                        error_count = 0
                     continue
-                
+
                 error_count = 0
-                
-                # OPTIMIZED JPEG ENCODING
-                ret, buffer = cv2.imencode('.jpg', frame, [
+                ret, buf = cv2.imencode('.jpg', frame, [
                     cv2.IMWRITE_JPEG_QUALITY, Config.JPEG_QUALITY,
-                    cv2.IMWRITE_JPEG_OPTIMIZE, 1
-                ])
-                
-                if not ret:
-                    continue
-                
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + 
-                       buffer.tobytes() + b'\r\n')
-                
-                # Log FPS periodically
-                if time.time() - last_log_time > 10:
-                    actual_fps = frame_count / (time.time() - last_log_time + frame_count * target_frame_time)
-                    print(f"📊 Stream FPS: {actual_fps:.1f} (target: {target_fps})")
-                    last_log_time = time.time()
-                    frame_count = 0
-                
+                    cv2.IMWRITE_JPEG_OPTIMIZE, 1])
+                if ret:
+                    yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n'
+
             except GeneratorExit:
-                print("📹 Client disconnected")
                 break
             except Exception as e:
-                error_count += 1
                 print(f"❌ Stream error: {e}")
                 time.sleep(0.1)
-    
-    return Response(
-        generate(),
-        mimetype='multipart/x-mixed-replace; boundary=frame',
-        headers={
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0',
-            'Connection': 'close'
-        }
-    )
 
-@app.route('/api/detection/toggle', methods=['POST'])
-def toggle_detection():
-    """Toggle detection"""
-    global detection_enabled, current_session_active, session_start_time
-    
-    data = request.get_json()
-    if data and 'enabled' in data:
-        detection_enabled = data['enabled']
-    else:
-        detection_enabled = not detection_enabled
-    
-    counter = get_counter()
-    sess_mgr = get_session_manager()
-    
-    if detection_enabled and not current_session_active:
-        camera_location = data.get('camera_location', 'CCTV Hall A') if data else 'CCTV Hall A'
-        session = sess_mgr.start_session(camera_location)
-        current_session_active = True
-        session_start_time = time.time()
-    
-    elif not detection_enabled and current_session_active:
-        stats = counter.get_statistics()
-        sess_mgr.end_session(
-            total_visitors=stats.get('daily_total', 0),
-            max_concurrent=stats.get('max_count', 0),
-            status='Selesai',
-            notes='Manual stop'
-        )
-        current_session_active = False
-        session_start_time = None
-    
-    return jsonify({
-        'success': True,
-        'detection_enabled': detection_enabled,
-        'session_active': current_session_active
-    })
+    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame',
+                    headers={'Cache-Control': 'no-cache', 'Connection': 'close'})
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SSE — real-time events
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/api/events')
+def sse_events():
+    """
+    Server-Sent Events endpoint.
+    Client connect sekali, dapat push setiap ada wajah baru / update.
+
+    Usage (JavaScript):
+        const es = new EventSource('/api/events');
+        es.addEventListener('new_face', e => console.log(JSON.parse(e.data)));
+        es.addEventListener('face_updated', e => console.log(JSON.parse(e.data)));
+        es.addEventListener('stats', e => console.log(JSON.parse(e.data)));
+    """
+    queue = []
+    with _sse_lock:
+        _sse_clients.append(queue)
+
+    def stream():
+        # Kirim stats awal
+        try:
+            c     = get_counter()
+            stats = c.get_statistics()
+            yield f"event: stats\ndata: {json.dumps(stats)}\n\n"
+        except Exception:
+            pass
+
+        try:
+            while True:
+                if queue:
+                    msg = queue.pop(0)
+                    yield msg
+                else:
+                    # Heartbeat setiap 5 detik agar koneksi tidak timeout
+                    yield ": heartbeat\n\n"
+                    time.sleep(5)
+        except GeneratorExit:
+            pass
+        finally:
+            with _sse_lock:
+                if queue in _sse_clients:
+                    _sse_clients.remove(queue)
+
+    return Response(stream_with_context(stream()),
+                    mimetype='text/event-stream',
+                    headers={
+                        'Cache-Control': 'no-cache',
+                        'X-Accel-Buffering': 'no',  # disable nginx buffering
+                        'Connection': 'keep-alive',
+                    })
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PUBLIC API — STATS
+# ─────────────────────────────────────────────────────────────────────────────
 
 @app.route('/api/stats')
 def get_stats():
-    """Get statistics"""
-    counter = get_counter()
-    stats = counter.get_statistics()
-    
+    c     = get_counter()
+    stats = c.get_statistics()
     return jsonify({
-        'current_count': stats.get('current_count', 0),
-        'max_count': stats.get('max_count', 0),
-        'daily_total': stats.get('daily_total', 0),
-        'database_faces': stats.get('database_size', 0),
-        'fps': stats.get('fps', 0),
-        'processing_fps': stats.get('processing_fps', 0),
-        'active_ids': stats.get('active_trackers', 0),
-        'detection_enabled': detection_enabled
+        'current_count':    stats.get('current_count', 0),
+        'max_count':        stats.get('max_count', 0),
+        'daily_total':      stats.get('daily_total', 0),
+        'database_faces':   stats.get('database_size', 0),
+        'fps':              stats.get('fps', 0),
+        'processing_fps':   stats.get('processing_fps', 0),
+        'active_ids':       stats.get('active_trackers', 0),
+        'detection_enabled': detection_enabled,
     })
 
 @app.route('/api/health')
 def health_check():
-    """Health check"""
-    counter = get_counter()
-    
+    c = get_counter()
     return jsonify({
-        'status': 'ok',
-        'service': f'OpenVINO Face Counter - {Config.STREAM_FPS} FPS',
-        'running': counter.is_running,
-        'detector': counter.detector_type,
-        'fps': round(counter.fps, 1),
-        'detection_enabled': detection_enabled
+        'status':           'ok',
+        'running':          c.is_running,
+        'detector':         c.detector_type,
+        'fps':              round(c.fps, 1),
+        'detection_enabled': detection_enabled,
+        'sse_clients':      len(_sse_clients),
+        'timestamp':        time.strftime('%Y-%m-%dT%H:%M:%S'),
     })
 
 @app.route('/api/history')
 def get_history():
-    """Get historical data"""
-    counter = get_counter()
-    return jsonify(counter.get_historical_data())
+    return jsonify(get_counter().get_historical_data())
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PUBLIC API — FACE DATABASE
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/api/faces')
+def get_faces():
+    """
+    GET /api/faces
+    Query params:
+      limit  (int, default 100)  — maks wajah yang dikembalikan
+      recent (int)               — jika diisi, ambil N wajah terbaru saja
+
+    Response:
+    {
+      "success": true,
+      "total": 42,
+      "faces": [
+        {
+          "id": "0",
+          "first_seen": "2026-02-14T11:29:12",
+          "last_seen":  "2026-04-06T14:46:22",
+          "detection_count": 139,
+          "thumbnail_b64": null
+        }, ...
+      ]
+    }
+    """
+    c     = get_counter()
+    limit  = request.args.get('limit',  100, type=int)
+    recent = request.args.get('recent', None, type=int)
+
+    if recent:
+        faces = c.face_db.get_recent_faces(recent)
+    else:
+        faces = c.face_db.get_all_faces_meta(limit)
+
+    return jsonify({
+        'success': True,
+        'total':   len(c.face_db.faces),
+        'returned': len(faces),
+        'faces':   faces,
+    })
+
+
+@app.route('/api/faces/<face_id>')
+def get_face_detail(face_id):
+    """GET /api/faces/<face_id> — detail satu wajah."""
+    c    = get_counter()
+    info = c.face_db.get_face_info(face_id)
+    if not info:
+        return jsonify({'success': False, 'message': 'Face not found'}), 404
+    return jsonify({'success': True, 'face': info})
+
+
+@app.route('/api/faces/stats')
+def get_face_stats():
+    """GET /api/faces/stats — statistik database wajah."""
+    c = get_counter()
+    return jsonify({'success': True, **c.face_db.get_statistics()})
+
+
+@app.route('/api/faces/reset', methods=['POST'])
+def reset_face_db():
+    """POST /api/faces/reset — hapus semua wajah dari database."""
+    get_counter().face_db.reset_database()
+    _broadcast_sse('db_reset', {'message': 'Face database reset', 'timestamp': time.time()})
+    return jsonify({'success': True, 'message': 'Face database reset'})
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PUBLIC API — SESSIONS
+# ─────────────────────────────────────────────────────────────────────────────
 
 @app.route('/api/sessions', methods=['GET'])
 def get_sessions():
-    sess_mgr = get_session_manager()
-    sessions = sess_mgr.get_all_sessions()
-    return jsonify({'success': True, 'sessions': sessions})
+    """
+    GET /api/sessions
+    Query params:
+      date     (YYYY-MM-DD)  — filter by tanggal
+      location (string)      — filter by lokasi kamera
+      limit    (int)         — maks hasil (default 200)
+
+    Response:
+    {
+      "success": true,
+      "sessions": [...],
+      "statistics": { total_sessions, total_visitors_all_time, ... },
+      "database_faces": 42,
+      "current_session": { ... } | null
+    }
+    """
+    mgr      = get_session_manager()
+    date_q   = request.args.get('date')
+    loc_q    = request.args.get('location')
+    limit    = request.args.get('limit', 200, type=int)
+
+    if date_q:
+        sessions = mgr.get_sessions_by_date(date_q)
+    elif loc_q:
+        sessions = mgr.get_sessions_by_location(loc_q)
+    else:
+        sessions = mgr.get_all_sessions(limit)
+
+    c = get_counter()
+    return jsonify({
+        'success':         True,
+        'sessions':        sessions,
+        'statistics':      mgr.get_summary(),
+        'database_faces':  len(c.face_db.faces),
+        'current_session': mgr.get_current_session(),
+    })
+
+
+@app.route('/api/sessions/<session_id>', methods=['DELETE'])
+def delete_session(session_id):
+    """DELETE /api/sessions/<session_id>"""
+    ok = get_session_manager().delete_session(session_id)
+    if ok:
+        return jsonify({'success': True, 'message': f'Session {session_id} deleted'})
+    return jsonify({'success': False, 'message': 'Session not found'}), 404
+
+
+@app.route('/api/sessions/export')
+def export_sessions_csv():
+    """GET /api/sessions/export — download CSV semua sessions."""
+    mgr = get_session_manager()
+    csv_str = mgr.export_csv()
+    filename = f"data-pengunjung-{time.strftime('%Y-%m-%d')}.csv"
+    return Response(
+        csv_str,
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+    )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PUBLIC API — DETECTION CONTROL
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/api/detection/toggle', methods=['POST'])
+def toggle_detection():
+    global detection_enabled, current_session_active, session_start_time
+    data = request.get_json() or {}
+
+    detection_enabled = data.get('enabled', not detection_enabled)
+    c   = get_counter()
+    mgr = get_session_manager()
+
+    if detection_enabled and not current_session_active:
+        loc     = data.get('camera_location', 'CCTV Hall A')
+        session = mgr.start_session(loc)
+        current_session_active = True
+        session_start_time     = time.time()
+    elif not detection_enabled and current_session_active:
+        stats = c.get_statistics()
+        mgr.end_session(
+            total_visitors  = stats.get('daily_total', 0),
+            max_concurrent  = stats.get('max_count', 0),
+            status          = 'Selesai',
+            notes           = 'Manual stop',
+        )
+        current_session_active = False
+        session_start_time     = None
+
+    _broadcast_sse('detection_toggled', {'enabled': detection_enabled})
+    return jsonify({'success': True, 'detection_enabled': detection_enabled,
+                    'session_active': current_session_active})
+
 
 @app.route('/api/reset', methods=['POST'])
 def reset_stats():
-    """Reset daily statistics"""
-    counter = get_counter()
-    counter.reset_daily_stats()
-    return jsonify({'success': True, 'message': 'Statistics reset successfully'})
+    get_counter().reset_daily_stats()
+    return jsonify({'success': True, 'message': 'Statistics reset'})
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BACKGROUND: broadcast stats via SSE setiap 3 detik
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _stats_broadcaster():
+    time.sleep(5)   # tunggu counter init
+    while True:
+        try:
+            if _sse_clients and counter:
+                stats = counter.get_statistics()
+                _broadcast_sse('stats', {
+                    'current_count':  stats.get('current_count', 0),
+                    'daily_total':    stats.get('daily_total', 0),
+                    'database_faces': stats.get('database_size', 0),
+                    'fps':            stats.get('fps', 0),
+                    'active_ids':     stats.get('active_trackers', 0),
+                })
+        except Exception as e:
+            print(f"⚠️  SSE broadcast error: {e}")
+        time.sleep(3)
+
+threading.Thread(target=_stats_broadcaster, daemon=True).start()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ENTRYPOINT
+# ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
-    cli = sys.modules['flask.cli']
-    cli.show_server_banner = lambda *x: None
-    
-    print("\n" + "="*70)
+    try: sys.modules['flask.cli'].show_server_banner = lambda *x: None
+    except: pass
+
+    # Deteksi IP lokal (LAN)
+    def get_local_ip():
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
+
+    local_ip = get_local_ip()
+
+    print("\n" + "="*65)
     print("🚀 OPENVINO FACE COUNTER")
-    print("="*70)
-    print(f"📹 CCTV: {Config.CCTV_IP}")
-    print(f"🎯 Detector: OpenVINO on {Config.OPENVINO_DEVICE}")
-    print(f"📐 Resolution: {Config.FRAME_WIDTH}x{Config.FRAME_HEIGHT}")
-    print(f"🎬 Stream FPS: {Config.STREAM_FPS}")
-    print(f"🔍 Detection FPS: {Config.DETECTION_FPS}")
-    print("="*70)
-    print(f"\n🌐 Dashboard: http://localhost:{Config.PORT}")
-    print("="*70)
-    print("\n⚠️  Press Ctrl+C to stop\n")
-    
+    print("="*65)
+    print(f"   CCTV IP   : {Config.CCTV_IP}")
+    print(f"   Detector  : OpenVINO on {Config.OPENVINO_DEVICE}")
+    print(f"   Resolution: {Config.FRAME_WIDTH}×{Config.FRAME_HEIGHT}")
+    print(f"   Stream FPS: {Config.STREAM_FPS}")
+    print(f"   Detect FPS: {Config.DETECTION_FPS}")
+    print("="*65)
+    print(f"\n🌐 Dashboard  (lokal) : http://localhost:{Config.PORT}")
+    print(f"🌐 Dashboard  (LAN)   : http://{local_ip}:{Config.PORT}")
+    print(f"📡 API Faces  (LAN)   : http://{local_ip}:{Config.PORT}/api/faces")
+    print(f"📋 API Sess   (LAN)   : http://{local_ip}:{Config.PORT}/api/sessions")
+    print(f"🔴 SSE Events (LAN)   : http://{local_ip}:{Config.PORT}/api/events")
+    print("="*65)
+    print(f"\n💡 Akses dari jaringan lain? Buka port {Config.PORT} di firewall:")
+    print(f"   sudo ufw allow {Config.PORT}/tcp")
+    print("="*65 + "\n")
+
     counter = get_counter()
     time.sleep(2)
     auto_start_session()
-    
+
     try:
-        app.run(
-            host=Config.HOST,
-            port=Config.PORT,
-            debug=False,
-            threaded=True,
-            use_reloader=False
-        )
+        app.run(host=Config.HOST, port=Config.PORT,
+                debug=False, threaded=True, use_reloader=False)
     except KeyboardInterrupt:
         print("\n\n⏸️  Stopping...")
-        if counter:
-            counter.stop()
+        if counter: counter.stop()
         print("✅ Stopped\n")
