@@ -1,189 +1,185 @@
 """
-HD Face Detection Configuration - High Performance & Accuracy
-Full HD video with optimized AI detection
+Surveillance-Grade Face Detection Configuration
+Sinkron dengan optimized_face_counter.py
 """
 import os
-import cv2
 
 class Config:
-    """HD Configuration for high-quality face detection"""
-    
+
     # ========================================
-    # OPENVINO & INFERENCE SETTINGS
+    # OPENVINO & MODEL
     # ========================================
-    USE_OPENVINO = True
-    OPENVINO_DEVICE = 'CPU'  # Use CPU (GPU requires OpenCL)
-    
-    # Model paths for OpenVINO
+    USE_OPENVINO     = True
+    OPENVINO_DEVICE  = 'CPU'
+
+    # Priority: adas-0001 paling bagus untuk CCTV jarak jauh
     FACE_DETECTION_MODEL_XML = 'models/face-detection-adas-0001.xml'
     FACE_DETECTION_MODEL_BIN = 'models/face-detection-adas-0001.bin'
-    
+
     # ========================================
-    # HD VIDEO STREAMING - 30 FPS!
+    # FPS — JANGAN naikkan DETECTION_FPS
+    # Detection berat di CPU, tracking yang mengisi sisanya
     # ========================================
-    TARGET_FPS = 25         # High performance target
-    STREAM_FPS = 25         # Smooth 30 FPS streaming
-    DETECTION_FPS = 15      # Detect every 2 frames for accuracy
-    
+    TARGET_FPS    = 20   # render target
+    STREAM_FPS    = 20   # frame capture rate
+    DETECTION_FPS = 3    # ← HARUS 3, sinkron dengan face_counter
+
     FRAME_SKIP = 1
-    
-    # Adaptive FPS disabled for consistent performance
     ENABLE_ADAPTIVE_FPS = False
-    MIN_FPS = 50
-    MAX_FPS = 50
-    
+    MIN_FPS = 20
+    MAX_FPS = 20
+
     # ========================================
-    # FULL HD RESOLUTION!
+    # RESOLUSI
+    # FRAME = resolusi display ke browser
+    # DETECTION = resolusi input ke OpenVINO
     # ========================================
-    FRAME_WIDTH = 960      # Full HD width
-    FRAME_HEIGHT = 540      # HD 720p
-    
-    # Detection resolution - balanced for accuracy
-    DETECTION_WIDTH = 940   # Higher resolution for better accuracy
-    DETECTION_HEIGHT = 460
-    
-    JPEG_QUALITY = 85       # High quality HD video
-   
-    
+    FRAME_WIDTH  = 960
+    FRAME_HEIGHT = 540
+
+    # ← 640x640 WAJIB untuk deteksi wajah kecil di 8 meter
+    # Jangan turunkan ke 320 atau 416
+    DETECTION_WIDTH  = 640
+    DETECTION_HEIGHT = 640
+
+    JPEG_QUALITY = 82
+
     # ========================================
-    # CCTV SETTINGS
+    # CCTV
     # ========================================
-    CCTV_IP = "10.2.22.39"
+    CCTV_IP   = "10.2.22.6"
     CCTV_USER = "admin"
     CCTV_PASS = "ictb4y4n"
-    
-    # Use highest quality stream (channel 101)
+
     CCTV_URLS = [
-        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}/streaming/channels/101",  # Main stream
-        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}/streaming/channels/102",  # Sub stream
+        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}/streaming/channels/101",
+        f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}/streaming/channels/102",
         f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}:554/stream1",
     ]
-    
+
     # ========================================
-    # THREADING OPTIMIZATION
+    # THREADING
+    # Queue kecil = latency rendah (jangan besarkan)
     # ========================================
-    FRAME_QUEUE_SIZE = 3    # Bigger queue for smooth HD
+    FRAME_QUEUE_SIZE  = 3
     RESULT_QUEUE_SIZE = 3
-    
+
     # ========================================
-    # AI DETECTION OPTIMIZATION
+    # THRESHOLD DETEKSI
+    # Nilai di bawah ini DIABAIKAN oleh face_counter
+    # (face_counter punya konstannya sendiri)
+    # Tapi tetap disimpan untuk referensi/legacy
     # ========================================
-    # Improved thresholds for accuracy
-    CONFIDENCE_THRESHOLD = 0.5  # Lower for better recall
-    MIN_FACE_SIZE = 40          # Minimum face size in pixels
-    MAX_FACE_SIZE = 500         # Maximum face size
-    
-    # Tracking - optimized for accuracy
-    TRACK_HISTORY_LENGTH = 20
-    MAX_TRACKING_DISTANCE = 150
-    FACE_TIMEOUT = 2.0
-    ID_TIMEOUT = 5.0
-    
-    # Cooldown
+    CONFIDENCE_THRESHOLD = 0.55   # sinkron: CONFIDENCE_THRESH di face_counter
+    MIN_FACE_SIZE        = 15     # sinkron: min 15px di OpenVINO inference
+    MAX_FACE_SIZE        = 500
+
+    # ========================================
+    # TRACKING
+    # ========================================
+    TRACK_HISTORY_LENGTH   = 40    # sinkron: deque(maxlen=40) di face_counter
+    MAX_TRACKING_DISTANCE  = 180   # sinkron: MAX_POSITION_DIST
+    FACE_TIMEOUT           = 2.0
+    ID_TIMEOUT             = 6.0   # sinkron: ID_TIMEOUT di face_counter
+
     DETECTION_COOLDOWN = 2.0
-    
+
     # ========================================
-    # DISPLAY SETTINGS
+    # DISPLAY
+    # Trail hijau sudah dimatikan di face_counter._draw_trail()
+    # Config ini untuk referensi saja
     # ========================================
-    # Show only NEW detections (no tracking boxes)
-    SHOW_TRACKING_BOXES = False  # Hide white tracking boxes!
-    SHOW_NEW_ONLY = True         # Only show green boxes for new faces
-    SHOW_FACE_ID = True
-    SHOW_CONFIDENCE = True
-    
-    # Box styling
-    NEW_FACE_COLOR = (0, 255, 0)      # Green for new
-    TRACKING_COLOR = (100, 100, 100)   # Dark gray (won't show)
-    BOX_THICKNESS = 3
-    FONT_SCALE = 0.6
-    FONT_THICKNESS = 2
-    
+    SHOW_TRACKING_BOXES = True    # corner bracket box tetap tampil semua status
+    SHOW_NEW_ONLY       = False   # semua status tampil (DETECTED, VERIFYING, dst)
+    SHOW_FACE_ID        = True
+    SHOW_CONFIDENCE     = True
+    SHOW_TRAIL          = False   # ← trail hijau MATI
+
+    # Warna dihandle STATUS_COLOR di face_counter, ini untuk referensi
+    NEW_FACE_COLOR    = (0, 255, 0)
+    TRACKING_COLOR    = (150, 150, 150)
+    BOX_THICKNESS     = 2
+    FONT_SCALE        = 0.45
+    FONT_THICKNESS    = 1
+
     # ========================================
-    # MEMORY OPTIMIZATION
+    # MEMORY
     # ========================================
     MAX_EMBEDDING_HISTORY = 5
-    MAX_QUALITY_HISTORY = 10
-    
+    MAX_QUALITY_HISTORY   = 15   # sinkron: deque(maxlen=15) di TrackerEntry
+
     ENABLE_AUTO_CLEANUP = True
-    CLEANUP_INTERVAL = 300
-    
+    CLEANUP_INTERVAL    = 300
+
     # ========================================
-    # FLASK SETTINGS
+    # FLASK
     # ========================================
-    HOST = '0.0.0.0'
-    PORT = 5000
-    DEBUG = False
+    HOST     = '0.0.0.0'
+    PORT     = 5000
+    DEBUG    = False
     THREADED = True
-    
+
     # ========================================
-    # STORAGE SETTINGS
+    # STORAGE
     # ========================================
-    STATS_FILE = 'data/face_counter_stats.pkl'
-    HISTORY_FILE = 'data/face_history.pkl'
+    STATS_FILE    = 'data/face_counter_stats.pkl'
+    HISTORY_FILE  = 'data/face_history.pkl'
     DATABASE_FILE = 'data/face_database.json'
     SESSIONS_FILE = 'data/sessions.json'
-    
+
     # ========================================
-    # OPENCV OPTIMIZATION
+    # OPENCV / RTSP
     # ========================================
-    MAX_BUFFER_SIZE = 3
-    RTSP_TRANSPORT = 'tcp'
-    RTSP_TIMEOUT = 10000
-    RECONNECT_DELAY = 2
+    MAX_BUFFER_SIZE        = 3
+    RTSP_TRANSPORT         = 'tcp'
+    RTSP_TIMEOUT           = 10000
+    RECONNECT_DELAY        = 2
     MAX_RECONNECT_ATTEMPTS = 5
-    
+
     @staticmethod
     def init_directories():
-        """Create necessary directories"""
-        os.makedirs('data', exist_ok=True)
-        os.makedirs('templates', exist_ok=True)
-        os.makedirs('static', exist_ok=True)
-        os.makedirs('models', exist_ok=True)
-    
+        for d in ('data', 'templates', 'static', 'models'):
+            os.makedirs(d, exist_ok=True)
+
     @staticmethod
     def download_openvino_models():
-        """Download Intel OpenVINO face detection models"""
         import urllib.request
-        
-        model_xml_url = "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2022.1/models_bin/3/face-detection-adas-0001/FP32/face-detection-adas-0001.xml"
-        model_bin_url = "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2022.1/models_bin/3/face-detection-adas-0001/FP32/face-detection-adas-0001.bin"
-        
-        print("📥 Downloading OpenVINO face detection models...")
-        
-        try:
-            os.makedirs('models', exist_ok=True)
-            
-            if not os.path.exists(Config.FACE_DETECTION_MODEL_XML):
-                print(f"   Downloading XML model...")
-                urllib.request.urlretrieve(model_xml_url, Config.FACE_DETECTION_MODEL_XML)
-                print("   ✅ XML downloaded")
-            
-            if not os.path.exists(Config.FACE_DETECTION_MODEL_BIN):
-                print(f"   Downloading BIN model...")
-                urllib.request.urlretrieve(model_bin_url, Config.FACE_DETECTION_MODEL_BIN)
-                print("   ✅ BIN downloaded")
-            
-            print("✅ OpenVINO models ready!")
-            return True
-            
-        except Exception as e:
-            print(f"❌ Error downloading models: {e}")
-            print("\n💡 Manual download:")
-            print(f"   XML: {model_xml_url}")
-            print(f"   BIN: {model_bin_url}")
-            return False
-    
+
+        base = "https://storage.openvinotoolkit.org/repositories/open_model_zoo/2022.1/models_bin/3/face-detection-adas-0001/FP32"
+        files = {
+            Config.FACE_DETECTION_MODEL_XML: f"{base}/face-detection-adas-0001.xml",
+            Config.FACE_DETECTION_MODEL_BIN: f"{base}/face-detection-adas-0001.bin",
+        }
+
+        print("📥 Downloading OpenVINO face-detection-adas-0001...")
+        os.makedirs('models', exist_ok=True)
+
+        for local_path, url in files.items():
+            if os.path.exists(local_path):
+                print(f"   ✅ Already exists: {local_path}")
+                continue
+            try:
+                print(f"   ⬇️  {local_path} ...")
+                urllib.request.urlretrieve(url, local_path)
+                print(f"   ✅ Done")
+            except Exception as e:
+                print(f"   ❌ Failed: {e}")
+                print(f"      Manual: {url}")
+                return False
+
+        print("✅ Models ready!")
+        return True
+
     @staticmethod
     def print_config():
-        """Print configuration summary"""
-        print("\n" + "="*70)
-        print("⚙️  HD FACE DETECTION - HIGH PERFORMANCE")
-        print("="*70)
-        print(f"🎮 Device: {Config.OPENVINO_DEVICE}")
-        print(f"🎬 Stream: {Config.STREAM_FPS} FPS")
-        print(f"🔍 Detection: {Config.DETECTION_FPS} FPS")
-        print(f"📐 Resolution: {Config.FRAME_WIDTH}x{Config.FRAME_HEIGHT} (HD)")
-        print(f"🔍 Detection Size: {Config.DETECTION_WIDTH}x{Config.DETECTION_HEIGHT}")
-        print(f"📊 Quality: {Config.JPEG_QUALITY}%")
-        print(f"👁️  Display: {'NEW ONLY' if Config.SHOW_NEW_ONLY else 'ALL'}")
-        print("="*70 + "\n")
+        print("\n" + "="*60)
+        print("⚙️  SURVEILLANCE FACE DETECTION CONFIG")
+        print("="*60)
+        print(f"   Device          : {Config.OPENVINO_DEVICE}")
+        print(f"   Stream FPS      : {Config.STREAM_FPS}")
+        print(f"   Detection FPS   : {Config.DETECTION_FPS}  ← CPU-friendly")
+        print(f"   Frame Size      : {Config.FRAME_WIDTH}×{Config.FRAME_HEIGHT}")
+        print(f"   Detection Size  : {Config.DETECTION_WIDTH}×{Config.DETECTION_HEIGHT}  ← 640 wajib!")
+        print(f"   Confidence Min  : {Config.CONFIDENCE_THRESHOLD}")
+        print(f"   Trail           : {'ON' if Config.SHOW_TRAIL else 'OFF'}")
+        print("="*60 + "\n")
