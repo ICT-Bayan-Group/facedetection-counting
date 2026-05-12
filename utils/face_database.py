@@ -1,319 +1,250 @@
-
-import json
-import os
-import numpy as np
+"""
+FaceDatabase — SQLite, real-time insert, event callbacks.
+Wajah baru langsung INSERT ke DB dan trigger callback ke Flask SSE.
+"""
+import os, sqlite3, threading, json, numpy as np
 from datetime import datetime
-from pathlib import Path
-import threading
-import time
+from typing import Callable, Optional
+
+DB_PATH = os.environ.get('FACE_DB_PATH', 'data/face_database.db')
+
+def _normalize(a):
+    n = np.linalg.norm(a); return a / n if n > 0 else a
+def _emb_to_blob(a): return a.astype(np.float32).tobytes()
+def _blob_to_emb(b): return np.frombuffer(b, dtype=np.float32)
+
+class _FacesDictCompat:
+    def __init__(self, db): self._db = db
+    def __len__(self): return self._db._count()
+    def __iter__(self):
+        with self._db._conn() as c:
+            for r in c.execute("SELECT id FROM faces"): yield r[0]
 
 class FaceDatabase:
-    """
-    Mengelola database wajah yang sudah terdeteksi
-    Menggunakan JSON untuk menyimpan embeddings dan metadata
-    """
-    
-    def __init__(self, db_path='data/face_database.json'):
+    SIMILARITY_THRESHOLD = 0.72
+
+    def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
-        self.faces = {}
-        self.similarity_threshold = 0.6
-        self._lock = threading.Lock()  # Thread safety
-        self._dirty = False  # Flag untuk track perubahan
-        
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        
-        self.load_database()
-        
-        # Start auto-save thread
-        self.auto_save_interval = 30  # Save setiap 30 detik
+        self.similarity_threshold = self.SIMILARITY_THRESHOLD
+        self._lock = threading.Lock()
         self._running = True
-        self._auto_save_thread = threading.Thread(target=self._auto_save_loop, daemon=True)
-        self._auto_save_thread.start()
-        print(f"✅ Auto-save enabled (every {self.auto_save_interval}s)")
-    
-    def _auto_save_loop(self):
-        """Background thread untuk auto-save"""
-        while self._running:
-            time.sleep(self.auto_save_interval)
-            if self._dirty:
-                self.save_database()
-                self._dirty = False
-                print(f"💾 Auto-saved database: {len(self.faces)} faces")
-    
-    def load_database(self):
-        """Load database dari JSON file"""
-        try:
-            if os.path.exists(self.db_path):
-                with open(self.db_path, 'r') as f:
-                    data = json.load(f)
-                    
-                # Convert embeddings dari list ke numpy array
-                with self._lock:
-                    self.faces = {}
-                    for face_id, face_data in data.items():
-                        try:
-                            self.faces[face_id] = {
-                                'embedding': np.array(face_data['embedding'], dtype=np.float32),
-                                'first_seen': face_data['first_seen'],
-                                'last_seen': face_data['last_seen'],
-                                'detection_count': face_data['detection_count']
-                            }
-                        except Exception as e:
-                            print(f"⚠️  Skipping corrupted face {face_id}: {e}")
-                            continue
-                
-                print(f"✅ Face database loaded: {len(self.faces)} unique faces")
-                print(f"📁 Database path: {os.path.abspath(self.db_path)}")
-                
-            else:
-                print(f"📁 Creating new face database at: {os.path.abspath(self.db_path)}")
-                self.faces = {}
-                self.save_database()  # Create empty file
-                
-        except Exception as e:
-            print(f"❌ Error loading face database: {e}")
-            print(f"📁 Attempted path: {os.path.abspath(self.db_path)}")
-            self.faces = {}
-    
-    def save_database(self, force=False):
-        """Save database ke JSON file"""
-        try:
-            with self._lock:
-                if not self.faces and not force:
-                    print("⚠️  No faces to save")
-                    return False
-                
-                # Convert numpy arrays ke list untuk JSON serialization
-                data = {}
-                for face_id, face_data in self.faces.items():
+        self._on_new_face_cbs:     list[Callable] = []
+        self._on_updated_face_cbs: list[Callable] = []
+        os.makedirs(os.path.dirname(self.db_path) or '.', exist_ok=True)
+        self._init_db()
+        print(f"✅ FaceDatabase (SQLite): {self._count()} wajah | {os.path.abspath(self.db_path)}")
+
+    # ── setup ─────────────────────────────────────────────────────────────
+    def _init_db(self):
+        with self._conn() as c:
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS faces (
+                    id              TEXT PRIMARY KEY,
+                    embedding       BLOB NOT NULL,
+                    first_seen      TEXT NOT NULL,
+                    last_seen       TEXT NOT NULL,
+                    detection_count INTEGER NOT NULL DEFAULT 1,
+                    thumbnail_b64   TEXT
+                )""")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_fs ON faces(first_seen)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_ls ON faces(last_seen)")
+            c.commit()
+
+    def _conn(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path, timeout=10)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        return conn
+
+    # ── callbacks ─────────────────────────────────────────────────────────
+    def register_callback(self, event: str, fn: Callable):
+        """event: 'new_face' | 'face_updated'"""
+        if event == 'new_face':      self._on_new_face_cbs.append(fn)
+        elif event == 'face_updated': self._on_updated_face_cbs.append(fn)
+
+    def _fire(self, cbs, face_id, meta):
+        for fn in cbs:
+            try: fn(face_id, meta)
+            except Exception as e: print(f"⚠️  Callback error: {e}")
+
+    # ── compat ────────────────────────────────────────────────────────────
+    @property
+    def faces(self): return _FacesDictCompat(self)
+
+    # ── find ──────────────────────────────────────────────────────────────
+    def find_matching_face(self, embedding) -> tuple:
+        if embedding is None: return None, 0
+        try: q = _normalize(np.array(embedding, dtype=np.float32))
+        except: return None, 0
+        best_id, best_sim = None, 0.0
+        with self._lock:
+            with self._conn() as c:
+                for row in c.execute("SELECT id, embedding FROM faces"):
                     try:
-                        embedding_list = face_data['embedding'].tolist()
-                        data[face_id] = {
-                            'embedding': embedding_list,
-                            'first_seen': face_data['first_seen'],
-                            'last_seen': face_data['last_seen'],
-                            'detection_count': face_data['detection_count']
-                        }
-                    except Exception as e:
-                        print(f"⚠️  Error converting face {face_id}: {e}")
-                        continue
-                
-                # Write to temporary file first
-                temp_path = self.db_path + '.tmp'
-                with open(temp_path, 'w') as f:
-                    json.dump(data, f, indent=2)
-                
-                # Atomic replace
-                os.replace(temp_path, self.db_path)
-                
-                print(f"💾 Database saved: {len(data)} faces → {os.path.abspath(self.db_path)}")
-                return True
-            
-        except Exception as e:
-            print(f"❌ Error saving face database: {e}")
-            print(f"📁 Attempted path: {os.path.abspath(self.db_path)}")
-            return False
-    
-    def find_matching_face(self, embedding):
-        """
-        Cari wajah yang cocok di database
-        Returns: (face_id, similarity) atau (None, 0) jika tidak ada yang cocok
-        """
-        if embedding is None:
-            return None, 0
-        
-        if len(self.faces) == 0:
-            return None, 0
-        
-        best_match_id = None
-        best_similarity = 0
-        
-        # Normalize embedding
+                        sim = float(np.dot(q, _normalize(_blob_to_emb(row['embedding']))))
+                        if sim > best_sim: best_sim, best_id = sim, row['id']
+                    except: continue
+        return (best_id, best_sim) if best_sim >= self.similarity_threshold else (None, 0)
+
+    # ── add / update ──────────────────────────────────────────────────────
+    def add_or_update_face(self, face_id: str, embedding,
+                        thumbnail_b64: Optional[str] = None) -> tuple:
+        if embedding is None: return False, None, 0
         try:
-            embedding = np.array(embedding, dtype=np.float32)
-            embedding_norm = np.linalg.norm(embedding)
-            if embedding_norm == 0:
-                return None, 0
-            embedding = embedding / embedding_norm
-        except Exception as e:
-            print(f"⚠️  Error normalizing embedding: {e}")
-            return None, 0
-        
-        # Cari wajah dengan similarity tertinggi
+            emb = np.array(embedding, dtype=np.float32)
+            if emb.size == 0 or np.isnan(emb).any(): return False, None, 0
+        except: return False, None, 0
+
+        matched_id, similarity = self.find_matching_face(emb)
+        now = datetime.now().isoformat()
+
         with self._lock:
-            for face_id, face_data in self.faces.items():
-                try:
-                    stored_embedding = face_data['embedding']
-                    
-                    # Normalize stored embedding
-                    stored_norm = np.linalg.norm(stored_embedding)
-                    if stored_norm == 0:
-                        continue
-                    stored_embedding = stored_embedding / stored_norm
-                    
-                    # Hitung cosine similarity
-                    similarity = float(np.dot(embedding, stored_embedding))
-                    
-                    if similarity > best_similarity:
-                        best_similarity = similarity
-                        best_match_id = face_id
-                
-                except Exception as e:
-                    print(f"⚠️  Error comparing with face {face_id}: {e}")
-                    continue
-        
-        # Return jika similarity melebihi threshold
-        if best_similarity >= self.similarity_threshold:
-            return best_match_id, best_similarity
-        
-        return None, 0
-    
-    def add_or_update_face(self, face_id, embedding):
-        """
-        Tambahkan wajah baru atau update existing face
-        Returns: (is_new_face, matched_id, similarity)
-        """
-        if embedding is None:
-            print(f"⚠️  Cannot add face {face_id}: embedding is None")
-            return False, None, 0
-        
-        try:
-            # Ensure embedding is numpy array
-            embedding = np.array(embedding, dtype=np.float32)
-            
-            # Validate embedding
-            if embedding.size == 0 or np.isnan(embedding).any():
-                print(f"⚠️  Invalid embedding for face {face_id}")
-                return False, None, 0
-            
-        except Exception as e:
-            print(f"⚠️  Error processing embedding for face {face_id}: {e}")
-            return False, None, 0
-        
-        # Cek apakah wajah sudah ada di database
-        matched_id, similarity = self.find_matching_face(embedding)
-        
-        current_time = datetime.now().isoformat()
-        
-        with self._lock:
-            if matched_id is not None:
-                # Wajah sudah ada di database - UPDATE
-                self.faces[matched_id]['last_seen'] = current_time
-                self.faces[matched_id]['detection_count'] += 1
-                
-                # Update embedding dengan weighted average
-                old_embedding = self.faces[matched_id]['embedding']
-                weight = 0.9  # 90% old, 10% new
-                new_embedding = weight * old_embedding + (1 - weight) * embedding
-                new_norm = np.linalg.norm(new_embedding)
-                if new_norm > 0:
-                    self.faces[matched_id]['embedding'] = new_embedding / new_norm
-                
-                self._dirty = True
-                print(f"🔄 Updated existing face {matched_id} (similarity: {similarity:.2f}, count: {self.faces[matched_id]['detection_count']})")
-                return False, matched_id, similarity
-            
-            else:
-                # Wajah BARU - ADD
-                embedding_norm = np.linalg.norm(embedding)
-                if embedding_norm == 0:
-                    print(f"⚠️  Cannot add face {face_id}: zero norm")
-                    return False, None, 0
-                
-                self.faces[face_id] = {
-                    'embedding': embedding / embedding_norm,
-                    'first_seen': current_time,
-                    'last_seen': current_time,
-                    'detection_count': 1
-                }
-                
-                self._dirty = True
-                print(f"✨ NEW FACE added to database: {face_id} (Total: {len(self.faces)})")
-                
-                # Force save untuk face baru
-                if len(self.faces) % 10 == 0:  # Save setiap 10 wajah baru
-                    self.save_database()
-                
-                return True, face_id, 1.0
-    
-    def get_face_info(self, face_id):
-        """Get informasi wajah dari database"""
-        with self._lock:
-            return self.faces.get(face_id, None)
-    
-    def remove_old_faces(self, days=30):
-        """Hapus wajah yang sudah tidak terdeteksi lebih dari X hari"""
-        from datetime import datetime, timedelta
-        
-        cutoff_date = datetime.now() - timedelta(days=days)
-        faces_to_remove = []
-        
-        with self._lock:
-            for face_id, face_data in self.faces.items():
-                try:
-                    last_seen = datetime.fromisoformat(face_data['last_seen'])
-                    if last_seen < cutoff_date:
-                        faces_to_remove.append(face_id)
-                except:
-                    continue
-            
-            for face_id in faces_to_remove:
-                del self.faces[face_id]
-        
-        if faces_to_remove:
-            print(f"🗑️  Removed {len(faces_to_remove)} old faces from database")
-            self.save_database(force=True)
-        
-        return len(faces_to_remove)
-    
-    def reset_database(self):
-        """Reset seluruh database"""
-        with self._lock:
-            self.faces = {}
-        self.save_database(force=True)
-        print("🔄 Face database reset")
-    
-    def get_statistics(self):
-        """Get statistik database"""
-        with self._lock:
-            if not self.faces:
-                return {
-                    'total_faces': 0,
-                    'oldest_face': None,
-                    'newest_face': None,
-                    'most_detected': None
-                }
-            
-            try:
-                # Find oldest and newest
-                oldest = min(self.faces.items(), key=lambda x: x[1]['first_seen'])
-                newest = max(self.faces.items(), key=lambda x: x[1]['first_seen'])
-                most_detected = max(self.faces.items(), key=lambda x: x[1]['detection_count'])
-                
-                return {
-                    'total_faces': len(self.faces),
-                    'oldest_face': {
-                        'id': oldest[0],
-                        'first_seen': oldest[1]['first_seen'],
-                        'detection_count': oldest[1]['detection_count']
-                    },
-                    'newest_face': {
-                        'id': newest[0],
-                        'first_seen': newest[1]['first_seen']
-                    },
-                    'most_detected': {
-                        'id': most_detected[0],
-                        'detection_count': most_detected[1]['detection_count']
+            with self._conn() as c:
+                if matched_id:
+                    # Wajah sudah ada di DB — update embedding
+                    row = c.execute(
+                        "SELECT embedding, detection_count FROM faces WHERE id=?",
+                        (matched_id,)).fetchone()
+                    if row:
+                        merged = _normalize(0.9 * _blob_to_emb(row['embedding']) + 0.1 * emb)
+                        c.execute(
+                            "UPDATE faces SET embedding=?, last_seen=?, detection_count=? WHERE id=?",
+                            (_emb_to_blob(merged), now, row['detection_count']+1, matched_id))
+                        c.commit()
+                    meta = self._row_to_meta(c, matched_id)
+                    threading.Thread(target=self._fire,
+                        args=(self._on_updated_face_cbs, matched_id, meta), daemon=True).start()
+                    return False, matched_id, similarity
+
+                else:
+                    # Wajah baru — INSERT OR IGNORE untuk mencegah race condition
+                    norm = _normalize(emb)
+                    c.execute(
+                        "INSERT OR IGNORE INTO faces "
+                        "(id,embedding,first_seen,last_seen,detection_count,thumbnail_b64) "
+                        "VALUES (?,?,?,?,1,?)",
+                        (face_id, _emb_to_blob(norm), now, now, thumbnail_b64))
+                    c.commit()
+
+                    if c.execute("SELECT changes()").fetchone()[0] == 0:
+                        # ID bentrok (race condition) — perlakukan sebagai update
+                        row = c.execute(
+                            "SELECT embedding, detection_count FROM faces WHERE id=?",
+                            (face_id,)).fetchone()
+                        if row:
+                            merged = _normalize(0.9 * _blob_to_emb(row['embedding']) + 0.1 * norm)
+                            c.execute(
+                                "UPDATE faces SET embedding=?, last_seen=?, detection_count=? WHERE id=?",
+                                (_emb_to_blob(merged), now, row['detection_count']+1, face_id))
+                            c.commit()
+                        meta = self._row_to_meta(c, face_id)
+                        threading.Thread(target=self._fire,
+                            args=(self._on_updated_face_cbs, face_id, meta), daemon=True).start()
+                        return False, face_id, 1.0
+
+                    total = c.execute("SELECT COUNT(*) FROM faces").fetchone()[0]
+                    meta = {
+                        'id': face_id, 'first_seen': now, 'last_seen': now,
+                        'detection_count': 1, 'thumbnail_b64': thumbnail_b64,
+                        'total_in_db': total,
                     }
-                }
-            except Exception as e:
-                print(f"⚠️  Error getting statistics: {e}")
-                return {'total_faces': len(self.faces)}
-    
-    def shutdown(self):
-        """Shutdown database dan save final"""
-        self._running = False
-        if self._dirty:
-            self.save_database(force=True)
-        print("💾 Face database shutdown complete")
+                    print(f"✨ WAJAH BARU → DB: {face_id} (total={total})")
+                    threading.Thread(target=self._fire,
+                        args=(self._on_new_face_cbs, face_id, meta), daemon=True).start()
+                    return True, face_id, 1.0
+
+    def _row_to_meta(self, conn, face_id):
+        r = conn.execute(
+            "SELECT id,first_seen,last_seen,detection_count FROM faces WHERE id=?",
+            (face_id,)).fetchone()
+        return dict(r) if r else {'id': face_id}
+
+    # ── public read ───────────────────────────────────────────────────────
+    def get_all_faces_meta(self, limit=1000) -> list:
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT id,first_seen,last_seen,detection_count,thumbnail_b64 "
+                "FROM faces ORDER BY first_seen DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_recent_faces(self, n=10) -> list:
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT id,first_seen,last_seen,detection_count,thumbnail_b64 "
+                "FROM faces ORDER BY first_seen DESC LIMIT ?", (n,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_face_info(self, face_id) -> Optional[dict]:
+        with self._conn() as c:
+            r = c.execute(
+                "SELECT id,first_seen,last_seen,detection_count FROM faces WHERE id=?",
+                (face_id,)).fetchone()
+        return dict(r) if r else None
+
+    def get_statistics(self) -> dict:
+        with self._conn() as c:
+            total = c.execute("SELECT COUNT(*) FROM faces").fetchone()[0]
+            if total == 0: return {'total_faces': 0}
+            oldest = dict(c.execute(
+                "SELECT id,first_seen,detection_count FROM faces ORDER BY first_seen ASC LIMIT 1"
+            ).fetchone())
+            newest = dict(c.execute(
+                "SELECT id,first_seen FROM faces ORDER BY first_seen DESC LIMIT 1"
+            ).fetchone())
+            most = dict(c.execute(
+                "SELECT id,detection_count FROM faces ORDER BY detection_count DESC LIMIT 1"
+            ).fetchone())
+        return {'total_faces': total, 'oldest_face': oldest,
+                'newest_face': newest, 'most_detected': most}
+
+    # ── management ────────────────────────────────────────────────────────
+    def remove_old_faces(self, days=30) -> int:
+        from datetime import timedelta
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        with self._lock:
+            with self._conn() as c:
+                n = c.execute("DELETE FROM faces WHERE last_seen < ?", (cutoff,)).rowcount
+                c.commit()
+        if n: print(f"🗑️  Removed {n} old faces")
+        return n
+
+    def reset_database(self):
+        with self._lock:
+            with self._conn() as c:
+                c.execute("DELETE FROM faces"); c.commit()
+        print("🔄 Face database reset")
+
+    def _count(self) -> int:
+        with self._conn() as c:
+            return c.execute("SELECT COUNT(*) FROM faces").fetchone()[0]
+
+    def migrate_from_json(self, json_path='data/face_database.json') -> int:
+        if not os.path.exists(json_path):
+            print(f"⚠️  JSON tidak ditemukan: {json_path}"); return 0
+        with open(json_path) as f: data = json.load(f)
+        migrated = skipped = 0
+        with self._lock:
+            with self._conn() as c:
+                for fid, fd in data.items():
+                    if c.execute("SELECT 1 FROM faces WHERE id=?", (fid,)).fetchone():
+                        skipped += 1; continue
+                    try:
+                        norm = _normalize(np.array(fd['embedding'], dtype=np.float32))
+                        c.execute(
+                            "INSERT INTO faces (id,embedding,first_seen,last_seen,detection_count) "
+                            "VALUES (?,?,?,?,?)",
+                            (fid, _emb_to_blob(norm),
+                             fd.get('first_seen', datetime.now().isoformat()),
+                             fd.get('last_seen',  datetime.now().isoformat()),
+                             fd.get('detection_count', 1)))
+                        migrated += 1
+                    except Exception as e: print(f"⚠️  Skip {fid}: {e}")
+                c.commit()
+        print(f"✅ Migrasi: {migrated} diimpor, {skipped} sudah ada")
+        return migrated
+
+    # ── compat shims ──────────────────────────────────────────────────────
+    def save_database(self, force=False): pass
+    def load_database(self): pass
+    def shutdown(self): self._running = False; print("💾 FaceDatabase shutdown")

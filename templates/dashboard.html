@@ -1,338 +1,744 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Face Counter - Enhanced Control</title>
+  <title>Face Counter - Dashboard Monitoring</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+
+    /* ── SUBTLE PAGE PATTERN ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background-image:
+        radial-gradient(circle at 15% 20%, rgba(59,130,246,0.07) 0%, transparent 45%),
+        radial-gradient(circle at 85% 75%, rgba(168,85,247,0.06) 0%, transparent 45%),
+        radial-gradient(circle at 50% 50%, rgba(16,185,129,0.04) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    /* ── NAVBAR ── */
+    .navbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      margin: 12px 16px 0;
+      background: #ffffff;
+      border-radius: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.07), 0 6px 20px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
+    }
+
+    .navbar-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 20px;
+      height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .navbar-brand { display: flex; align-items: center; gap: 12px; flex-shrink: 0; min-width: 0; }
+    .navbar-logo { height: 40px; width: auto; object-fit: contain; max-width: 140px; flex-shrink: 0; }
+    .navbar-title {
+      font-size: 1.05rem; font-weight: 700;
+      background: linear-gradient(135deg, #ea580c 0%, #ca8a04 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      white-space: nowrap;
+    }
+    .navbar-subtitle { font-size: 0.72rem; color: #94a3b8; white-space: nowrap; margin-top: 1px; }
+
+    .navbar-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+    .live-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px;
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      border-radius: 50px; font-weight: 600; font-size: 0.75rem; color: #fff;
+      box-shadow: 0 2px 10px rgba(239,68,68,0.35);
+      animation: livePulse 2s ease-in-out infinite;
+    }
+    @keyframes livePulse {
+      0%,100% { box-shadow: 0 2px 10px rgba(239,68,68,0.35); }
+      50%      { box-shadow: 0 2px 18px rgba(239,68,68,0.6); }
+    }
+    .live-dot { width: 7px; height: 7px; background: #fff; border-radius: 50%; animation: blink 1.5s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 5px 12px;
+      background: #f0fdf4; border: 1px solid #bbf7d0;
+      border-radius: 50px; font-size: 0.78rem; color: #15803d; font-weight: 500;
+    }
+    .status-dot {
+      width: 8px; height: 8px; background: #22c55e; border-radius: 50%; flex-shrink: 0;
+      box-shadow: 0 0 0 3px rgba(34,197,94,.2);
+      animation: sDot 2s ease-in-out infinite;
+    }
+    @keyframes sDot {
+      0%,100%{ box-shadow:0 0 0 3px rgba(34,197,94,.2); }
+      50%    { box-shadow:0 0 0 5px rgba(34,197,94,.1); }
+    }
+
+    .navbar-btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 8px 16px;
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: #fff; border-radius: 12px; font-weight: 600; font-size: 0.82rem;
+      text-decoration: none; border: none; cursor: pointer;
+      box-shadow: 0 2px 8px rgba(59,130,246,0.3);
+      transition: all .25s ease;
+      white-space: nowrap;
+    }
+    .navbar-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(59,130,246,.45); background: linear-gradient(135deg,#2563eb,#1d4ed8); }
+
+    @media(max-width:480px){
+      .navbar-subtitle,.status-label,.btn-label,.live-label{ display:none; }
+      .navbar-title{ font-size:.88rem; }
+      .status-pill{ padding:5px 8px; }
+      .navbar-btn{ padding:8px 10px; }
+      .live-badge{ padding:5px 8px; }
+      .navbar-logo{ height:32px; max-width:100px; }
+    }
+    @media(max-width:360px){
+      .navbar-inner{ padding:0 12px; height:60px; }
+      .navbar{ margin:8px 8px 0; border-radius:16px; }
+    }
+
+    /* ── CARDS ── */
+    .card {
+      background: #ffffff;
+      border-radius: 20px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06);
+      transition: all .3s cubic-bezier(.4,0,.2,1);
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08), 0 12px 32px rgba(0,0,0,0.1);
+      border-color: #bfdbfe;
+    }
+
+    /* ── STAT CARDS ── */
     .stat-card {
-      background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-      transition: all 0.3s ease;
+      background: #ffffff;
+      border-radius: 20px;
+      padding: 1.4rem;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06);
+      transition: all .4s cubic-bezier(.4,0,.2,1);
+      position: relative;
+      overflow: hidden;
     }
-    .stat-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 20px;
+      opacity: 0;
+      transition: opacity .35s ease;
+      background: linear-gradient(135deg, rgba(59,130,246,0.04), rgba(139,92,246,0.04));
     }
-    .pulse-dot {
-      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    .stat-card:hover { transform: translateY(-5px) scale(1.015); box-shadow: 0 8px 24px rgba(0,0,0,0.12); border-color: #bfdbfe; }
+    .stat-card:hover::after { opacity: 1; }
+
+    .stat-number {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 2.4rem;
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      line-height: 1.2;
     }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
+
+    .icon-wrap {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 48px; height: 48px; border-radius: 14px;
+      flex-shrink: 0;
     }
-    .nav-link {
-      transition: all 0.3s ease;
+
+    /* ── PROGRESS BAR ── */
+    .progress-bar { height: 6px; background: #e2e8f0; border-radius: 50px; overflow: hidden; }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+      border-radius: 50px;
+      transition: width .5s ease;
+      position: relative; overflow: hidden;
     }
-    .nav-link:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    .progress-fill::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent);
+      animation: shimmer 2s infinite;
     }
-    #videoFeed {
-      min-height: 360px;
-      background: #1e293b;
+    @keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
+
+    /* ── VIDEO ── */
+    .video-container {
+      position: relative; border-radius: 16px; overflow: hidden;
+      background: #0f172a;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
     }
+    .video-container::before {
+      content: '';
+      position: absolute; top:-2px;left:-2px;right:-2px;bottom:-2px;
+      background: linear-gradient(45deg,#3b82f6,#8b5cf6,#ec4899,#3b82f6);
+      background-size: 300% 300%;
+      border-radius: 18px; z-index: -1;
+      animation: borderAnim 4s ease infinite;
+    }
+    @keyframes borderAnim { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+    .video-stream { width: 100%; height: auto; display: block; border-radius: 14px; }
+
+    /* ── FPS MONITOR ── */
+    .fps-monitor {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      padding: 6px 14px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      color: #475569;
+    }
+
+    /* ── TOGGLE ── */
+    .toggle-switch {
+      position: relative; width: 56px; height: 30px;
+      background: #cbd5e1; border-radius: 50px;
+      cursor: pointer; transition: all .3s ease;
+    }
+    .toggle-switch.active { background: linear-gradient(135deg, #10b981, #059669); }
+    .toggle-slider {
+      position: absolute; top: 3px; left: 3px;
+      width: 24px; height: 24px; background: white;
+      border-radius: 50%; transition: all .3s cubic-bezier(.4,0,.2,1);
+      box-shadow: 0 1px 4px rgba(0,0,0,.2);
+    }
+    .toggle-switch.active .toggle-slider { transform: translateX(26px); }
+
+    /* ── BUTTONS ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: .7rem 1.4rem; border-radius: 12px;
+      font-weight: 600; font-size: .9rem;
+      border: none; cursor: pointer;
+      transition: all .25s ease;
+      width: 100%;
+    }
+    .btn-blue {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: white;
+      box-shadow: 0 2px 8px rgba(59,130,246,.25);
+    }
+    .btn-blue:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(59,130,246,.4); background:linear-gradient(135deg,#2563eb,#1d4ed8); }
+    .btn-red {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      color: white;
+      box-shadow: 0 2px 8px rgba(239,68,68,.2);
+    }
+    .btn-red:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(239,68,68,.35); }
+
+    /* ── INFO BOX ── */
+    .info-box {
+      background: linear-gradient(135deg, #eff6ff, #f5f3ff);
+      border: 1px solid #ddd6fe;
+      border-radius: 14px;
+      padding: 1rem;
+    }
+
+    /* ── DIVIDER ── */
+    .divider { border: none; border-top: 1px solid #e2e8f0; margin: 1.25rem 0; }
+
+    /* ── CHART ── */
+    .chart-container { position: relative; height: 280px; }
+
+    /* ── SECTION LABEL ── */
+    .section-label {
+      font-size: .7rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .08em; color: #94a3b8; margin-bottom: .5rem;
+    }
+
+    /* ── TOAST ── */
+    .toast {
+      position: fixed; top: 20px; right: 20px;
+      background: #ffffff;
+      border-radius: 14px;
+      padding: 1rem 1.5rem;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+      border-left: 4px solid #3b82f6;
+      z-index: 9999;
+      animation: toastIn .3s ease;
+      color: #1e293b;
+      font-weight: 500;
+      font-size: .9rem;
+    }
+    @keyframes toastIn { from{transform:translateX(360px);opacity:0} to{transform:translateX(0);opacity:1} }
+
+    /* ── MOBILE ── */
+    @media(max-width:768px){
+      .stat-number{ font-size:2rem; }
+      .chart-container{ height:220px; }
+      .stat-card{ padding:1rem; }
+      .card{ border-radius:16px; }
+    }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width:6px; }
+    ::-webkit-scrollbar-track { background:#f1f5f9; }
+    ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:4px; }
+    ::-webkit-scrollbar-thumb:hover { background:#94a3b8; }
   </style>
 </head>
-<body class="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 min-h-screen">
-  
-  <!-- Header -->
-  <header class="bg-white/80 backdrop-blur-lg border-b border-gray-200/50 sticky top-0 z-50">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <img src="https://res.cloudinary.com/dwyi4d3rq/image/upload/v1765779007/BAYAN_R_-_BAWAH_xs3qyv.png" alt="Logo" class="h-12 w-12" />
+<body>
+
+  <!-- ── NAVBAR ── -->
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <div class="navbar-brand">
+        <img src="https://res.cloudinary.com/djs5pi7ev/image/upload/v1774509112/BAYAN_R_-_SAMPING_fgnkyb.png"
+             alt="Logo" class="navbar-logo"
+             onerror="this.style.display='none'" />
+        <div>
+          <div class="navbar-title">Face Counter Dashboard</div>
+          <div class="navbar-subtitle">Sistem Monitoring Pengunjung Real-time</div>
+        </div>
+      </div>
+
+      <div class="navbar-right">
+        <div id="liveIndicator" class="live-badge hidden">
+          <span class="live-dot"></span>
+          <span class="live-label">LIVE</span>
+        </div>
+        <div class="status-pill">
+          <span class="status-dot"></span>
+          <span class="status-label">Sistem Aktif</span>
+        </div>
+        <a href="/data-pengunjung" class="navbar-btn">
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20" style="flex-shrink:0">
+            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+            <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
+          </svg>
+          <span class="btn-label">Data Pengunjung</span>
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── MAIN ── -->
+  <main class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- STAT CARDS -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+
+      <!-- Pengunjung Saat Ini -->
+      <div class="stat-card">
+        <div class="icon-wrap mb-3" style="background:#eff6ff;">
+          <svg width="22" height="22" fill="#3b82f6" viewBox="0 0 20 20">
+            <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
+          </svg>
+        </div>
+        <p class="section-label">Pengunjung Saat Ini</p>
+        <p class="stat-number" id="currentCount">0</p>
+        <div class="progress-bar mt-3">
+          <div class="progress-fill" id="currentProgress" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- Maksimal -->
+      <div class="stat-card">
+        <div class="icon-wrap mb-3" style="background:#faf5ff;">
+          <svg width="22" height="22" fill="#8b5cf6" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd"/>
+          </svg>
+        </div>
+        <p class="section-label">Maksimal Hari Ini</p>
+        <p class="stat-number" id="maxCount">0</p>
+        <p style="font-size:.75rem;color:#94a3b8;margin-top:6px;">Rekor tertinggi</p>
+      </div>
+
+      <!-- Total Hari Ini -->
+      <div class="stat-card">
+        <div class="icon-wrap mb-3" style="background:#f0fdf4;">
+          <svg width="22" height="22" fill="#10b981" viewBox="0 0 20 20">
+            <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/>
+          </svg>
+        </div>
+        <p class="section-label">Total Hari Ini</p>
+        <p class="stat-number" id="dailyTotal">0</p>
+        <p style="font-size:.75rem;color:#94a3b8;margin-top:6px;">Wajah unik terdeteksi</p>
+      </div>
+
+      <!-- Database -->
+      <div class="stat-card">
+        <div class="icon-wrap mb-3" style="background:#fff7ed;">
+          <svg width="22" height="22" fill="#f97316" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clip-rule="evenodd"/>
+          </svg>
+        </div>
+        <p class="section-label">Database Wajah</p>
+        <p class="stat-number" id="databaseFaces">0</p>
+        <p style="font-size:.75rem;color:#94a3b8;margin-top:6px;">Total tersimpan</p>
+      </div>
+
+      <!-- FPS -->
+      <div class="stat-card">
+        <div class="icon-wrap mb-3" style="background:#fff1f2;">
+          <svg width="22" height="22" fill="#f43f5e" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/>
+          </svg>
+        </div>
+        <p class="section-label">Performa Sistem</p>
+        <p class="stat-number" id="systemFPS">0</p>
+        <p style="font-size:.75rem;color:#94a3b8;margin-top:6px;">FPS real-time</p>
+      </div>
+
+    </div>
+
+    <!-- VIDEO + CONTROL -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- Video -->
+      <div class="card p-5 lg:col-span-2">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
           <div>
-            <h1 class="text-2xl font-bold text-gray-900">Face Detection System</h1>
-            <p class="text-sm text-gray-500">Real-time CCTV Monitoring Dashboard</p>
+            <p class="section-label">Live Stream</p>
+            <h2 style="font-size:1.2rem;font-weight:700;color:#1e293b;">Video Stream Live</h2>
+          </div>
+          <div class="fps-monitor">
+            <span style="color:#94a3b8;">Stream:</span>
+            <span style="color:#3b82f6;font-weight:600;" id="streamFPS">0</span>
+            <span style="color:#94a3b8;">FPS</span>
+            <span style="margin:0 8px;color:#cbd5e1;">|</span>
+            <span style="color:#94a3b8;">Deteksi:</span>
+            <span style="color:#8b5cf6;font-weight:600;" id="processingFPS">0</span>
+            <span style="color:#94a3b8;">FPS</span>
           </div>
         </div>
 
-        <div class="flex items-center gap-3">
-          <a href="/data-pengunjung" class="nav-link flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white font-semibold rounded-xl shadow-lg">
-            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
-              <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
+        <div class="video-container">
+          <img id="videoStream" src="/video_feed" alt="Video Stream" class="video-stream" onerror="handleStreamError()" />
+        </div>
+
+        <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1" style="font-size:.82rem;color:#64748b;">
+          <span style="display:flex;align-items:center;gap:5px;">
+            <svg width="14" height="14" fill="#10b981" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+            <span id="streamStatus">Stream aktif dan terhubung</span>
+          </span>
+          <span>Resolusi: <strong style="color:#3b82f6;">960×540</strong></span>
+          <span id="activeTrackers">Tracking: <strong style="color:#8b5cf6;">0</strong></span>
+        </div>
+      </div>
+
+      <!-- Control Panel -->
+      <div class="card p-5 flex flex-col gap-5">
+        <div>
+          <p class="section-label">Panel Kontrol</p>
+          <h2 style="font-size:1.2rem;font-weight:700;color:#1e293b;">Kontrol Sistem</h2>
+        </div>
+
+        <!-- Toggle -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:#f8fafc;border-radius:14px;border:1px solid #e2e8f0;">
+          <div>
+            <p style="font-weight:600;font-size:.9rem;color:#374151;">Deteksi Wajah</p>
+            <p style="font-size:.75rem;color:#94a3b8;margin-top:2px;">Aktifkan / nonaktifkan</p>
+          </div>
+          <div class="toggle-switch active" id="detectionToggle" onclick="toggleDetection()">
+            <div class="toggle-slider"></div>
+          </div>
+        </div>
+
+        <!-- Session info -->
+        <div class="info-box">
+          <p class="section-label" style="color:#818cf8;">Info Sesi</p>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:.82rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="color:#64748b;">Status</span>
+              <span id="sessionStatus" style="font-weight:600;color:#10b981;">Aktif</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="color:#64748b;">Durasi</span>
+              <span id="sessionDuration" style="font-family:'JetBrains Mono',monospace;font-weight:600;color:#3b82f6;">00:00:00</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="color:#64748b;">Terakhir Update</span>
+              <span id="lastUpdate" style="font-family:'JetBrains Mono',monospace;color:#8b5cf6;">-</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Buttons -->
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <button onclick="refreshStats()" class="btn btn-blue">
+            <svg width="18" height="18" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
             </svg>
-            Data Pengunjung
-          </a>
+            Refresh Data
+          </button>
+          <button onclick="confirmReset()" class="btn btn-red">
+            <svg width="18" height="18" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
+            </svg>
+            Reset Statistik
+          </button>
+        </div>
 
-          <div id="detectionBadge" class="flex items-center gap-2 px-4 py-2 bg-emerald-50 rounded-full border border-emerald-200">
-            <span class="w-2 h-2 bg-emerald-500 rounded-full pulse-dot"></span>
-            <span class="text-sm font-medium text-emerald-700">Detecting</span>
-          </div>
-          
-          <div id="streamBadge" class="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-full border border-blue-200">
-            <span class="w-2 h-2 bg-blue-500 rounded-full pulse-dot"></span>
-            <span class="text-sm font-medium text-blue-700">Streaming</span>
+        <hr class="divider" />
+
+        <!-- System info -->
+        <div>
+          <p class="section-label">Informasi Sistem</p>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:.82rem;">
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:#64748b;">Metode Deteksi</span>
+              <span id="detectionMethod" style="font-weight:600;color:#3b82f6;">OpenVINO</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:#64748b;">Embedding</span>
+              <span id="embeddingStatus" style="font-weight:600;color:#10b981;">Aktif</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:#64748b;">Target FPS</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-weight:600;color:#8b5cf6;">25 FPS</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:#64748b;">Resolusi Deteksi</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-weight:600;color:#f97316;">940×460</span>
+            </div>
           </div>
         </div>
+
       </div>
     </div>
-  </header>
 
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    
-    <!-- Stats Grid -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-      <div class="stat-card rounded-3xl p-6 border shadow-lg">
-        <div class="flex items-center justify-between mb-4">
-          <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center">
-            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
-            </svg>
-          </div>
-        </div>
-        <h3 class="text-sm font-medium text-gray-600 mb-1">Current Faces</h3>
-        <p class="text-3xl font-bold text-gray-900" id="currentCount">0</p>
-      </div>
+    <!-- CHARTS -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-      <div class="stat-card rounded-3xl p-6 border shadow-lg">
-        <div class="flex items-center justify-between mb-4">
-          <div class="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center">
-            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd"/>
-            </svg>
-          </div>
-        </div>
-        <h3 class="text-sm font-medium text-gray-600 mb-1">Max Today</h3>
-        <p class="text-3xl font-bold text-gray-900" id="maxCount">0</p>
-      </div>
-
-      <div class="stat-card rounded-3xl p-6 border shadow-lg">
-        <div class="flex items-center justify-between mb-4">
-          <div class="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-500 rounded-2xl flex items-center justify-center">
-            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/>
-            </svg>
-          </div>
-        </div>
-        <h3 class="text-sm font-medium text-gray-600 mb-1">Total Unique</h3>
-        <p class="text-3xl font-bold text-gray-900" id="dailyTotal">0</p>
-      </div>
-
-      <div class="stat-card rounded-3xl p-6 border shadow-lg">
-        <div class="flex items-center justify-between mb-4">
-          <div class="w-12 h-12 bg-gradient-to-br from-orange-500 to-amber-500 rounded-2xl flex items-center justify-center">
-            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/>
-            </svg>
-          </div>
-        </div>
-        <h3 class="text-sm font-medium text-gray-600 mb-1">FPS</h3>
-        <p class="text-3xl font-bold text-gray-900"><span id="fps">0</span></p>
-      </div>
-    </div>
-
-    <!-- Video Feed -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-      <div class="lg:col-span-2">
-        <div class="stat-card rounded-3xl overflow-hidden border shadow-lg">
-          <div class="bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-4 flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-white">Live Camera Feed</h2>
-            <div id="videoStatus" class="text-sm text-gray-400">Loading...</div>
-          </div>
-          <div class="relative bg-slate-900">
-            <img id="videoFeed" alt="CCTV Feed" class="w-full h-auto" />
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <div class="stat-card rounded-3xl p-6 border shadow-lg h-full">
-          <h2 class="text-lg font-bold text-gray-900 mb-6">Hourly Activity</h2>
+      <div class="card p-5">
+        <p class="section-label">Analitik</p>
+        <h2 style="font-size:1.1rem;font-weight:700;color:#1e293b;margin-bottom:1rem;">Statistik Per Jam</h2>
+        <div class="chart-container">
           <canvas id="hourlyChart"></canvas>
         </div>
       </div>
-    </div>
 
-    <!-- System Controls -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      <div class="stat-card rounded-3xl p-6 border shadow-lg">
-        <h2 class="text-lg font-bold text-gray-900 mb-6">Peak Hours</h2>
-        <div id="peakHoursList" class="space-y-3">
-          <p class="text-gray-500 text-center py-8">Loading...</p>
+      <div class="card p-5">
+        <p class="section-label">Real-time</p>
+        <h2 style="font-size:1.1rem;font-weight:700;color:#1e293b;margin-bottom:1rem;">Timeline Deteksi</h2>
+        <div class="chart-container">
+          <canvas id="timelineChart"></canvas>
         </div>
       </div>
 
-      <div class="stat-card rounded-3xl p-6 border shadow-lg">
-        <h2 class="text-lg font-bold text-gray-900 mb-6">System Controls</h2>
-        <div class="space-y-3">
-          <button onclick="resetStats()" class="w-full bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-semibold py-4 rounded-2xl shadow-lg transition-all">
-            Reset Daily Stats
-          </button>
-          <button onclick="exportData()" class="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold py-4 rounded-2xl shadow-lg transition-all">
-            Export Data
-          </button>
-          <button onclick="checkHealth()" class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold py-4 rounded-2xl shadow-lg transition-all">
-            Check Health
-          </button>
-        </div>
-      </div>
     </div>
+
   </main>
 
   <script>
-    let hourlyChart;
     let detectionEnabled = true;
-    let sessionActive = false;
-    let sessionStartTime = null;
-    let videoRetryCount = 0;
-    const MAX_VIDEO_RETRIES = 5;
+    let sessionStartTime = Date.now();
+    let hourlyChart = null, timelineChart = null;
+    let statsHistory = [];
+    const maxHist = 30;
 
-    // Video feed management
-    function initVideoFeed() {
-      const videoFeed = document.getElementById('videoFeed');
-      const videoStatus = document.getElementById('videoStatus');
-      
-      const updateVideoSrc = () => {
-        const timestamp = new Date().getTime();
-        videoFeed.src = `/video_feed?t=${timestamp}`;
-        videoStatus.textContent = 'Connecting...';
-        console.log('🎥 Loading video feed...');
-      };
-      
-      videoFeed.addEventListener('load', () => {
-        console.log('✅ Video feed loaded successfully');
-        videoStatus.textContent = 'Connected';
-        videoStatus.className = 'text-sm text-green-400';
-        videoRetryCount = 0;
-      });
-      
-      videoFeed.addEventListener('error', (e) => {
-        console.error('❌ Video feed error:', e);
-        videoStatus.textContent = 'Connection error';
-        videoStatus.className = 'text-sm text-red-400';
-        
-        if (videoRetryCount < MAX_VIDEO_RETRIES) {
-          videoRetryCount++;
-          console.log(`🔄 Retrying... (${videoRetryCount}/${MAX_VIDEO_RETRIES})`);
-          setTimeout(updateVideoSrc, 2000);
-        } else {
-          videoStatus.textContent = 'Failed to connect';
-          console.error('❌ Max retries reached');
+    document.addEventListener('DOMContentLoaded', () => {
+      initCharts();
+      updateStats();
+      startTimer();
+      setInterval(updateStats, 2000);
+      setInterval(updateCharts, 5000);
+    });
+
+    function initCharts() {
+      const gridColor = 'rgba(226,232,240,0.8)';
+      const tickColor = '#94a3b8';
+      const baseOpts = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor } },
+          x: { grid: { color: gridColor }, ticks: { color: tickColor } }
         }
-      });
-      
-      // Initial load
-      updateVideoSrc();
-    }
+      };
 
-    function initChart() {
-      const ctx = document.getElementById('hourlyChart').getContext('2d');
-      hourlyChart = new Chart(ctx, {
-        type: 'line',
+      hourlyChart = new Chart(document.getElementById('hourlyChart').getContext('2d'), {
+        type: 'bar',
         data: {
-          labels: Array.from({length: 24}, (_, i) => `${String(i).padStart(2, '0')}:00`),
+          labels: Array.from({length:24},(_,i)=>`${i}:00`),
           datasets: [{
-            label: 'Face Count',
-            data: Array(24).fill(0),
-            backgroundColor: 'rgba(99, 102, 241, 0.1)',
-            borderColor: 'rgb(99, 102, 241)',
-            borderWidth: 3,
-            tension: 0.4,
-            fill: true
+            data: new Array(24).fill(0),
+            backgroundColor: 'rgba(59,130,246,0.15)',
+            borderColor: 'rgba(59,130,246,.8)',
+            borderWidth: 2,
+            borderRadius: 8
           }]
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          plugins: { legend: { display: false } },
-          scales: {
-            y: { beginAtZero: true },
-            x: { ticks: { font: { size: 9 } } }
-          }
-        }
+        options: baseOpts
+      });
+
+      timelineChart = new Chart(document.getElementById('timelineChart').getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [{
+            data: [],
+            borderColor: 'rgba(139,92,246,.9)',
+            backgroundColor: 'rgba(139,92,246,.08)',
+            borderWidth: 2.5,
+            fill: true, tension: 0.4,
+            pointRadius: 4,
+            pointBackgroundColor: '#8b5cf6',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2
+          }]
+        },
+        options: { ...baseOpts, animation: { duration: 600 } }
       });
     }
 
-    function updateStats() {
-      fetch('/api/stats')
-        .then(r => r.json())
-        .then(data => {
-          document.getElementById('currentCount').textContent = data.current_count || 0;
-          document.getElementById('maxCount').textContent = data.max_count || 0;
-          document.getElementById('dailyTotal').textContent = data.daily_total || 0;
-          document.getElementById('fps').textContent = (data.fps || 0).toFixed(1);
-          
-          const hourlyData = Array(24).fill(0);
-          if (data.hourly_stats) {
-            Object.entries(data.hourly_stats).forEach(([hour, count]) => {
-              hourlyData[parseInt(hour)] = count;
-            });
-          }
-          hourlyChart.data.datasets[0].data = hourlyData;
-          hourlyChart.update('none');
-        })
-        .catch(e => console.error('Stats error:', e));
+    async function updateStats() {
+      try {
+        const data = await fetch('/api/stats').then(r=>r.json());
 
-      fetch('/api/history')
-        .then(r => r.json())
-        .then(data => updatePeakHours(data.peak_hours || []))
-        .catch(e => console.error('History error:', e));
-    }
+        set('currentCount', data.current_count||0);
+        set('maxCount', data.max_count||0);
+        set('dailyTotal', data.daily_total||0);
+        set('databaseFaces', data.database_faces||0);
+        set('systemFPS', Math.round(data.fps||0));
+        set('streamFPS', Math.round(data.fps||0));
+        set('processingFPS', Math.round(data.processing_fps||0));
 
-    function updatePeakHours(peakHours) {
-      const container = document.getElementById('peakHoursList');
-      if (!peakHours || peakHours.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 text-center py-8">No data</p>';
-        return;
-      }
+        const tSpan = document.querySelector('#activeTrackers strong');
+        if(tSpan) tSpan.textContent = data.active_ids||0;
 
-      const gradients = ['from-blue-500 to-cyan-500', 'from-emerald-500 to-teal-500', 'from-violet-500 to-purple-500', 'from-orange-500 to-amber-500', 'from-rose-500 to-pink-500'];
-      
-      container.innerHTML = peakHours.map((item, i) => `
-        <div class="flex items-center justify-between p-4 bg-gradient-to-r ${gradients[i]} rounded-2xl text-white">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center font-bold">${i+1}</div>
-            <div>
-              <p class="font-semibold text-lg">${String(item.hour).padStart(2, '0')}:00</p>
-            </div>
-          </div>
-          <div class="text-right">
-            <p class="text-3xl font-bold">${item.count}</p>
-          </div>
-        </div>
-      `).join('');
-    }
+        const pct = Math.min(100, ((data.current_count||0)/50)*100);
+        const pb = document.getElementById('currentProgress');
+        if(pb) pb.style.width = pct+'%';
 
-    function resetStats() {
-      if (confirm('Reset daily statistics?')) {
-        fetch('/api/reset', {method: 'POST'})
-          .then(r => r.json())
-          .then(data => { alert(data.message); updateStats(); });
+        const live = document.getElementById('liveIndicator');
+        live.classList.toggle('hidden', !data.detection_enabled);
+
+        document.getElementById('detectionToggle').classList.toggle('active', !!data.detection_enabled);
+        set('sessionStatus', data.detection_enabled ? 'Aktif' : 'Tidak Aktif');
+        document.getElementById('sessionStatus').style.color = data.detection_enabled ? '#10b981' : '#f43f5e';
+        set('lastUpdate', new Date().toLocaleTimeString('id-ID'));
+
+        addToHistory(data.current_count||0);
+      } catch(e) {
+        console.error(e);
+        showToast('Gagal memperbarui statistik', 'error');
       }
     }
 
-    function exportData() {
-      fetch('/api/stats')
-        .then(r => r.json())
-        .then(data => {
-          const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `face-counter-${new Date().toISOString().split('T')[0]}.json`;
-          a.click();
-        });
+    async function updateCharts() {
+      try {
+        const data = await fetch('/api/history').then(r=>r.json());
+        if(data.hourly_stats && hourlyChart) {
+          const arr = new Array(24).fill(0);
+          Object.entries(data.hourly_stats).forEach(([h,c]) => arr[+h]=c);
+          hourlyChart.data.datasets[0].data = arr;
+          hourlyChart.update();
+        }
+      } catch(e){}
     }
 
-    function checkHealth() {
-      fetch('/api/health')
-        .then(r => r.json())
-        .then(data => {
-          alert(`Status: ${data.status}\nService: ${data.service}\nDetector: ${data.detector}\nFPS: ${data.fps}\nRunning: ${data.running}`);
-        });
+    function addToHistory(count) {
+      const label = new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+      statsHistory.push({label, count});
+      if(statsHistory.length > maxHist) statsHistory.shift();
+      if(timelineChart) {
+        timelineChart.data.labels = statsHistory.map(s=>s.label);
+        timelineChart.data.datasets[0].data = statsHistory.map(s=>s.count);
+        timelineChart.update();
+      }
+    }
+
+    async function toggleDetection() {
+      try {
+        detectionEnabled = !detectionEnabled;
+        const data = await fetch('/api/detection/toggle',{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({enabled:detectionEnabled})
+        }).then(r=>r.json());
+        if(data.success) {
+          document.getElementById('detectionToggle').classList.toggle('active', detectionEnabled);
+          showToast(detectionEnabled ? 'Deteksi diaktifkan' : 'Deteksi dinonaktifkan', 'success');
+        }
+      } catch(e){ showToast('Gagal mengubah status', 'error'); }
+    }
+
+    async function refreshStats() {
+      showToast('Memperbarui data...', 'info');
+      await updateStats();
+      await updateCharts();
+      showToast('Data berhasil diperbarui', 'success');
+    }
+
+    function confirmReset() {
+      if(confirm('Yakin ingin mereset semua statistik hari ini? Data akan dihapus permanen.')) resetStats();
+    }
+
+    async function resetStats() {
+      try {
+        const data = await fetch('/api/reset',{method:'POST'}).then(r=>r.json());
+        if(data.success) {
+          statsHistory = [];
+          await updateStats(); await updateCharts();
+          showToast('Statistik berhasil direset', 'success');
+        } else showToast('Gagal mereset statistik', 'error');
+      } catch(e){ showToast('Terjadi kesalahan', 'error'); }
+    }
+
+    function startTimer() {
+      setInterval(() => {
+        const e = Date.now() - sessionStartTime;
+        const h = Math.floor(e/3600000), m = Math.floor((e%3600000)/60000), s = Math.floor((e%60000)/1000);
+        set('sessionDuration', `${pad(h)}:${pad(m)}:${pad(s)}`);
+      }, 1000);
+    }
+
+    function handleStreamError() {
+      const el = document.getElementById('streamStatus');
+      if(el) el.innerHTML = '<span style="color:#f43f5e;">⚠️ Stream terputus, mencoba reconnect...</span>';
+      setTimeout(() => {
+        const v = document.getElementById('videoStream');
+        if(v) v.src = '/video_feed?'+Date.now();
+      }, 3000);
+    }
+
+    function set(id, val) { const el=document.getElementById(id); if(el) el.textContent=val; }
+    function pad(n) { return String(n).padStart(2,'0'); }
+
+    function showToast(msg, type='info') {
+      const colors = { success:'#10b981', error:'#ef4444', info:'#3b82f6' };
+      const t = document.createElement('div');
+      t.className = 'toast';
+      t.style.borderLeftColor = colors[type];
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => { t.style.transition='.3s'; t.style.opacity='0'; t.style.transform='translateX(360px)'; setTimeout(()=>t.remove(),300); }, 3000);
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      console.log('🚀 Dashboard initializing...');
-      initVideoFeed();
-      initChart();
-      updateStats();
-      setInterval(updateStats, 1000);
-      console.log('✅ Dashboard ready');
+      const v = document.getElementById('videoStream');
+      if(v) v.addEventListener('contextmenu', e=>e.preventDefault());
     });
   </script>
 </body>

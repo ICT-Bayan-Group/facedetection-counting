@@ -1,73 +1,176 @@
 """
-Session Manager
+SessionManager — SQLite backend, API lengkap untuk endpoint publik.
 """
-import json
-import os
+import os, sqlite3, json, uuid
 from datetime import datetime
-import uuid
+from typing import Optional
+
+DB_PATH = os.environ.get('SESSION_DB_PATH', 'data/sessions.db')
+
 
 class SessionManager:
-    """Manages detection sessions"""
-    
-    def __init__(self, sessions_file='data/sessions.json'):
-        self.sessions_file = sessions_file
-        self.sessions = []
+    def __init__(self, db_path: str = DB_PATH):
+        self.db_path         = db_path
         self.current_session = None
-        self.load_sessions()
-    
-    def load_sessions(self):
-        """Load sessions from file"""
-        try:
-            if os.path.exists(self.sessions_file):
-                with open(self.sessions_file, 'r') as f:
-                    self.sessions = json.load(f)
-        except Exception as e:
-            print(f"Failed to load sessions: {e}")
-            self.sessions = []
-    
-    def save_sessions(self):
-        """Save sessions to file"""
-        try:
-            os.makedirs('data', exist_ok=True)
-            with open(self.sessions_file, 'w') as f:
-                json.dump(self.sessions, f, indent=2)
-        except Exception as e:
-            print(f"Failed to save sessions: {e}")
-    
-    def start_session(self, camera_location='CCTV Hall A'):
-        """Start new session"""
+        os.makedirs(os.path.dirname(self.db_path) or '.', exist_ok=True)
+        self._init_db()
+        print(f"✅ SessionManager (SQLite): {self._count()} sesi")
+
+    def _init_db(self):
+        with self._conn() as c:
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id              TEXT PRIMARY KEY,
+                    camera_location TEXT,
+                    start_time      TEXT NOT NULL,
+                    end_time        TEXT,
+                    total_visitors  INTEGER DEFAULT 0,
+                    max_concurrent  INTEGER DEFAULT 0,
+                    status          TEXT DEFAULT 'Active',
+                    notes           TEXT DEFAULT ''
+                )""")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_start  ON sessions(start_time)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_status ON sessions(status)")
+            c.commit()
+
+    def _conn(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path, timeout=10)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
+
+    # ── lifecycle ─────────────────────────────────────────────────────────
+    def start_session(self, camera_location='CCTV Hall A') -> dict:
+        sid = str(uuid.uuid4())[:8]
+        now = datetime.now().isoformat()
         self.current_session = {
-            'id': str(uuid.uuid4())[:8],
-            'camera_location': camera_location,
-            'start_time': datetime.now().isoformat(),
-            'end_time': None,
-            'total_visitors': 0,
-            'max_concurrent': 0,
-            'status': 'Active'
+            'id': sid, 'camera_location': camera_location,
+            'start_time': now, 'end_time': None,
+            'total_visitors': 0, 'max_concurrent': 0,
+            'status': 'Active', 'notes': '',
         }
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO sessions (id,camera_location,start_time,status) VALUES (?,?,?,'Active')",
+                (sid, camera_location, now))
+            c.commit()
+        print(f"🚀 Session started: {sid} | {camera_location}")
         return self.current_session
-    
-    def end_session(self, total_visitors=0, max_concurrent=0, status='Completed', notes=''):
-        """End current session"""
-        if self.current_session:
-            self.current_session.update({
-                'end_time': datetime.now().isoformat(),
-                'total_visitors': total_visitors,
-                'max_concurrent': max_concurrent,
-                'status': status,
-                'notes': notes
-            })
-            self.sessions.append(self.current_session)
-            self.save_sessions()
-            session = self.current_session
-            self.current_session = None
-            return session
-        return None
-    
-    def get_all_sessions(self):
-        """Get all sessions"""
-        return self.sessions
-    
-    def get_current_session(self):
-        """Get current active session"""
-        return self.current_session
+
+    def end_session(self, total_visitors=0, max_concurrent=0,
+                    status='Selesai', notes='') -> Optional[dict]:
+        if not self.current_session: return None
+        now = datetime.now().isoformat()
+        sid = self.current_session['id']
+        self.current_session.update({
+            'end_time': now, 'total_visitors': total_visitors,
+            'max_concurrent': max_concurrent, 'status': status, 'notes': notes,
+        })
+        with self._conn() as c:
+            c.execute(
+                "UPDATE sessions SET end_time=?,total_visitors=?,max_concurrent=?,status=?,notes=? WHERE id=?",
+                (now, total_visitors, max_concurrent, status, notes, sid))
+            c.commit()
+        print(f"⏹️  Session ended: {sid} | visitors={total_visitors}")
+        s = self.current_session
+        self.current_session = None
+        return s
+
+    # ── queries ───────────────────────────────────────────────────────────
+    def get_all_sessions(self, limit=500) -> list:
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT * FROM sessions ORDER BY start_time DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_sessions_by_date(self, date_str: str) -> list:
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT * FROM sessions WHERE start_time LIKE ? ORDER BY start_time DESC",
+                (f"{date_str}%",)).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_sessions_by_location(self, location: str) -> list:
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT * FROM sessions WHERE camera_location=? ORDER BY start_time DESC",
+                (location,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def delete_session(self, session_id: str) -> bool:
+        with self._conn() as c:
+            n = c.execute("DELETE FROM sessions WHERE id=?", (session_id,)).rowcount
+            c.commit()
+        return n > 0
+
+    def get_summary(self) -> dict:
+        today = datetime.now().strftime('%Y-%m-%d')
+        with self._conn() as c:
+            total    = c.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+            finished = c.execute(
+                "SELECT SUM(total_visitors), MAX(max_concurrent), COUNT(*) "
+                "FROM sessions WHERE status != 'Active'").fetchone()
+            today_ct = c.execute(
+                "SELECT COUNT(*), SUM(total_visitors) FROM sessions WHERE start_time LIKE ?",
+                (f"{today}%",)).fetchone()
+            avg_dur  = c.execute("""
+                SELECT AVG((julianday(end_time) - julianday(start_time)) * 1440)
+                FROM sessions WHERE end_time IS NOT NULL
+            """).fetchone()[0]
+        total_vis = finished[0] or 0
+        total_ses = finished[2] or 0
+        return {
+            'total_sessions':              total,
+            'total_visitors_all_time':     total_vis,
+            'max_concurrent_ever':         finished[1] or 0,
+            'average_visitors_per_session': round(total_vis / total_ses, 1) if total_ses else 0,
+            'average_duration_minutes':    round(avg_dur, 1) if avg_dur else 0,
+            'sessions_today':              today_ct[0] or 0,
+            'visitors_today':              today_ct[1] or 0,
+        }
+
+    def get_current_session(self): return self.current_session
+
+    def export_csv(self) -> str:
+        """Return CSV string untuk semua sessions."""
+        rows = self.get_all_sessions(limit=10000)
+        lines = ['id,camera_location,start_time,end_time,total_visitors,max_concurrent,status,notes']
+        for r in rows:
+            lines.append(','.join(str(r.get(k,'')) for k in
+                ['id','camera_location','start_time','end_time',
+                 'total_visitors','max_concurrent','status','notes']))
+        return '\n'.join(lines)
+
+    def _count(self) -> int:
+        with self._conn() as c:
+            return c.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+
+    def migrate_from_json(self, json_path='data/sessions.json') -> int:
+        if not os.path.exists(json_path):
+            print(f"⚠️  JSON tidak ditemukan: {json_path}"); return 0
+        with open(json_path) as f: sessions = json.load(f)
+        migrated = skipped = 0
+        with self._conn() as c:
+            for s in sessions:
+                sid = s.get('id', str(uuid.uuid4())[:8])
+                if c.execute("SELECT 1 FROM sessions WHERE id=?", (sid,)).fetchone():
+                    skipped += 1; continue
+                try:
+                    c.execute(
+                        "INSERT INTO sessions (id,camera_location,start_time,end_time,"
+                        "total_visitors,max_concurrent,status,notes) VALUES (?,?,?,?,?,?,?,?)",
+                        (sid, s.get('camera_location',''),
+                         s.get('start_time', datetime.now().isoformat()),
+                         s.get('end_time'), s.get('total_visitors',0),
+                         s.get('max_concurrent',0), s.get('status','Selesai'),
+                         s.get('notes','')))
+                    migrated += 1
+                except Exception as e: print(f"⚠️  Skip {sid}: {e}")
+            c.commit()
+        print(f"✅ Migrasi sessions: {migrated} diimpor, {skipped} sudah ada")
+        return migrated
+
+    # ── compat shims ──────────────────────────────────────────────────────
+    def load_sessions(self): pass
+    def save_sessions(self): pass
