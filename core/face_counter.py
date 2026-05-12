@@ -2,10 +2,10 @@ import cv2
 import numpy as np
 import os
 import time
+import uuid
 import threading
 from collections import defaultdict, deque
 from datetime import datetime
-from queue import Queue, Empty
 from enum import Enum
 
 # ─────────────────────────────────────────────
@@ -42,22 +42,22 @@ from utils.stats_manager import StatisticsManager
 # ─────────────────────────────────────────────────────────────────────────────
 
 class FaceStatus(Enum):
-    DETECTED        = "DETECTED"         # Frame 1–5   : baru muncul, belum diverifikasi
-    VERIFYING       = "VERIFYING"        # Frame 6–15  : sedang dievaluasi (blur, frontal, consistency)
-    WAJAH_BARU      = "WAJAH_BARU"       # Match DB: tidak ada  → disimpan ke database
-    SUDAH_TERDETEKSI= "SUDAH_TERDETEKSI" # Match DB: ada        → tidak disimpan lagi
-    TRACKING        = "TRACKING"         # Sedang dilacak setelah diverifikasi
-    LOST            = "LOST"             # Hilang dari frame
+    DETECTED         = "DETECTED"          # Frame 1–5   : baru muncul, belum diverifikasi
+    VERIFYING        = "VERIFYING"         # Frame 6–15  : sedang dievaluasi
+    WAJAH_BARU       = "WAJAH_BARU"        # Match DB: tidak ada  → disimpan ke database
+    SUDAH_TERDETEKSI = "SUDAH_TERDETEKSI"  # Match DB: ada        → tidak disimpan lagi
+    TRACKING         = "TRACKING"          # Sedang dilacak setelah diverifikasi
+    LOST             = "LOST"              # Hilang dari frame
 
 
 # Warna BGR per status
-STATUS_COLOR: dict[FaceStatus, tuple] = {
-    FaceStatus.DETECTED:         (255, 255, 255),   # putih
-    FaceStatus.VERIFYING:        (0,   255, 255),   # kuning
-    FaceStatus.WAJAH_BARU:       (0,   255,   0),   # hijau
-    FaceStatus.SUDAH_TERDETEKSI: (255, 165,   0),   # oranye
-    FaceStatus.TRACKING:         (150, 150, 150),   # abu-abu
-    FaceStatus.LOST:             (0,     0, 255),   # merah
+STATUS_COLOR: dict = {
+    FaceStatus.DETECTED:         (255, 255, 255),  # putih
+    FaceStatus.VERIFYING:        (0,   255, 255),  # kuning
+    FaceStatus.WAJAH_BARU:       (0,   255,   0),  # hijau
+    FaceStatus.SUDAH_TERDETEKSI: (255, 165,   0),  # oranye
+    FaceStatus.TRACKING:         (150, 150, 150),  # abu-abu
+    FaceStatus.LOST:             (0,     0, 255),  # merah
 }
 
 
@@ -87,21 +87,21 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 class TrackerEntry:
     """Menyimpan state satu wajah yang sedang dilacak."""
 
-    VERIFY_FRAME_THRESHOLD = 10   # frame minimum sebelum status berubah dari VERIFYING
+    VERIFY_FRAME_THRESHOLD = 10  # frame minimum sebelum status berubah dari VERIFYING
 
     def __init__(self, face_id: int, cx: int, cy: int, ts: float):
-        self.face_id        = face_id
-        self.cx             = cx
-        self.cy             = cy
-        self.last_seen      = ts
-        self.status         = FaceStatus.DETECTED
-        self.frame_count    = 0          # berapa frame wajah ini terlihat
-        self.quality_hist   = deque(maxlen=15)
-        self.blur_hist      = deque(maxlen=15)
-        self.embedding      = None
-        self.last_embed_ts  = 0.0        # kapan terakhir embedding diextract
-        self.db_id          = None       # ID di FaceDatabase setelah match/save
-        self.last_box       = None       # [x,y,w,h] — disimpan untuk redraw antar detection frame
+        self.face_id       = face_id
+        self.cx            = cx
+        self.cy            = cy
+        self.last_seen     = ts
+        self.status        = FaceStatus.DETECTED
+        self.frame_count   = 0
+        self.quality_hist  = deque(maxlen=15)
+        self.blur_hist     = deque(maxlen=15)
+        self.embedding     = None
+        self.last_embed_ts = 0.0
+        self.db_id         = None
+        self.last_box      = None  # [x,y,w,h] — disimpan untuk redraw antar detection frame
 
     def update_position(self, cx: int, cy: int, ts: float):
         self.cx = cx
@@ -137,33 +137,33 @@ class OpenVINOFaceCounter:
     """
     Surveillance-grade face counter dengan:
     - OpenVINO face-detection-adas-0001 (optimal untuk CCTV jarak jauh)
-    - FaceNet INT8 embedding (throttled: 1x per 2 detik per wajah)
+    - FaceNet embedding (throttled: 1x per 2 detik per wajah)
     - State machine FaceStatus
     - Blur filter (Laplacian variance)
     - Frontal face validator (aspect ratio + eye symmetry)
     - Anti-duplicate database logic (similarity threshold 0.72)
-    - Detection 640×640 (penting untuk wajah kecil di 8 meter)
-    - Detection FPS rendah (3 FPS) + Tracking FPS tinggi (15-20 FPS)
+    - Detection 640x640 (penting untuk wajah kecil di 8 meter)
+    - Atomic frame slot (bukan queue) untuk latency rendah
     """
 
-    # ─── TUNABLE CONSTANTS ────────────────────────────────────────────────
-    DETECTION_FPS       = 3          # OpenVINO inference rate
-    TRACK_FPS           = 20         # render/tracking rate
-    DETECTION_SIZE      = (640, 640) # JANGAN turunkan untuk CCTV jarak jauh
-    CONFIDENCE_THRESH   = 0.55       # ↓ lebih rendah agar wajah jauh/miring tetap lolos
-    QUALITY_THRESH      = 0.30       # ↓ longgar, kualitas dinilai dari blur saja di CCTV
-    BLUR_THRESH         = 30         # ↓ CCTV jauh blur wajar, jangan terlalu ketat
-    FRONTAL_THRESH      = 0.20       # ↓ deteksi wajah miring/menunduk tetap masuk
-    EMBED_INTERVAL      = 2.0        # detik minimum antar embedding extraction
-    EMBED_SIM_THRESH    = 0.72       # cosine similarity untuk pencocokan DB
-    MAX_POSITION_DIST   = 180        # ↑ lebih besar untuk kompensasi gerakan cepat
-    ID_TIMEOUT          = 15.0       # ↑ 15 detik — box tetap tampil selama wajah ada di frame
-    # ──────────────────────────────────────────────────────────────────────
+    # ─── TUNABLE CONSTANTS ───────────────────────────────────────────────
+    DETECTION_FPS     = 5           # OpenVINO inference rate (dinaikkan dari 3)
+    TRACK_FPS         = 20          # render/tracking rate
+    DETECTION_SIZE    = (640, 640)  # JANGAN turunkan untuk CCTV jarak jauh
+    CONFIDENCE_THRESH = 0.55        # lebih rendah agar wajah jauh/miring tetap lolos
+    QUALITY_THRESH    = 0.30        # longgar, kualitas dinilai dari blur saja di CCTV
+    BLUR_THRESH       = 30          # CCTV jauh blur wajar, jangan terlalu ketat
+    FRONTAL_THRESH    = 0.20        # deteksi wajah miring/menunduk tetap masuk
+    EMBED_INTERVAL    = 2.0         # detik minimum antar embedding extraction
+    EMBED_SIM_THRESH  = 0.72        # cosine similarity untuk pencocokan DB
+    MAX_POSITION_DIST = 180         # lebih besar untuk kompensasi gerakan cepat
+    ID_TIMEOUT        = 15.0        # box tetap tampil selama wajah ada di frame
+    # ─────────────────────────────────────────────────────────────────────
 
     def __init__(self, cctv_urls, user, password, config):
         print("🔄 Initializing Surveillance-Grade OpenVINO Face Counter...")
 
-        self.config = config
+        self.config        = config
         self.video_handler = VideoStreamHandler(cctv_urls, user, password)
         self.stats_manager = StatisticsManager()
         self.face_db       = FaceDatabase()
@@ -177,7 +177,7 @@ class OpenVINOFaceCounter:
         )
 
         # FaceNet
-        self.resnet        = None
+        self.resnet         = None
         self.use_embeddings = False
         if FACENET_AVAILABLE:
             try:
@@ -195,39 +195,42 @@ class OpenVINOFaceCounter:
         self.input_layer    = None
         self.output_layer   = None
         self.ov_n = self.ov_c = self.ov_h = self.ov_w = None
-        self.face_cascade   = None
-        self.frontal_cascade= None
-        self.eye_cascade    = None
+        self.face_cascade    = None
+        self.frontal_cascade = None
+        self.eye_cascade     = None
+        self._ov_input_buf   = None  # pre-allocated buffer untuk OpenVINO inference
 
         self._init_detector()
         self._init_frontal_validator()
 
-        # Queues
-        self.frame_queue  = Queue(maxsize=getattr(config, 'FRAME_QUEUE_SIZE',  4))
-        self.result_queue = Queue(maxsize=getattr(config, 'RESULT_QUEUE_SIZE', 4))
+        # ── Atomic frame slots (mengganti Queue untuk low-latency) ───────
+        self._latest_frame  = None  # frame terbaru dari capture
+        self._latest_result = None  # (frame, faces, ts) terbaru dari detection
+        self._frame_lock    = threading.Lock()
+        self._result_lock   = threading.Lock()
 
         # Tracker state
-        self.trackers: dict[int, TrackerEntry] = {}
-        self.next_id   = 0
-        self.track_history: dict[int, deque] = defaultdict(lambda: deque(maxlen=40))
+        self.trackers: dict    = {}
+        self.next_id           = 0
+        self.track_history     = defaultdict(lambda: deque(maxlen=40))
 
         # Runtime state
-        self.frame           = None
-        self.is_running      = False
-        self.cap             = None
-        self.fps             = 0.0
-        self.processing_fps  = 0.0
-        self.frame_times     = deque(maxlen=30)
-        self.last_frame_ts   = time.time()
-        self.last_detect_ts  = 0.0
-        self.current_faces   = []    # [(box, tracker_entry), ...]
+        self.frame          = None
+        self.is_running     = False
+        self.cap            = None
+        self.fps            = 0.0
+        self.processing_fps = 0.0
+        self.frame_times    = deque(maxlen=30)
+        self.last_frame_ts  = time.time()
+        self.last_detect_ts = 0.0
+        self.current_faces  = []
 
         self.stats_manager.load_statistics()
         config.init_directories()
 
         print("✅ System ready")
         print(f"   Detector      : {self.detector_type}")
-        print(f"   Detection Size: {self.DETECTION_SIZE[0]}×{self.DETECTION_SIZE[1]}")
+        print(f"   Detection Size: {self.DETECTION_SIZE[0]}x{self.DETECTION_SIZE[1]}")
         print(f"   Embeddings    : {'ON' if self.use_embeddings else 'OFF'}")
         print(f"   Blur Filter   : ON (threshold={self.BLUR_THRESH})")
         print(f"   Frontal Only  : ON")
@@ -278,14 +281,16 @@ class OpenVINOFaceCounter:
                 self.ie = Core()
                 model   = self.ie.read_model(model=xml_path, weights=bin_path)
 
-                # INT8 quantization hint (jika model mendukung)
                 try:
                     from openvino.runtime import properties
-                    config_hint = {properties.hint.performance_mode(): properties.hint.PerformanceMode.THROUGHPUT}
-                    self.compiled_model = self.ie.compile_model(model=model, device_name=device,
-                                                                config=config_hint)
+                    config_hint = {
+                        properties.hint.performance_mode(): properties.hint.PerformanceMode.THROUGHPUT
+                    }
+                    self.compiled_model = self.ie.compile_model(
+                        model=model, device_name=device, config=config_hint)
                 except Exception:
-                    self.compiled_model = self.ie.compile_model(model=model, device_name=device)
+                    self.compiled_model = self.ie.compile_model(
+                        model=model, device_name=device)
 
                 self.input_layer  = self.compiled_model.input(0)
                 self.output_layer = self.compiled_model.output(0)
@@ -301,7 +306,6 @@ class OpenVINOFaceCounter:
             except Exception as e:
                 print(f"⚠️  Failed to load {model_name}: {e}")
 
-        # Semua model gagal
         self._init_haar_fallback()
 
     def _init_haar_fallback(self):
@@ -332,7 +336,7 @@ class OpenVINOFaceCounter:
     def start(self):
         if self.is_running:
             return
-        self.cap = self.video_handler.connect()
+        self.cap        = self.video_handler.connect()
         self.is_running = True
 
         threading.Thread(target=self._capture_loop,   daemon=True, name="Capture").start()
@@ -357,151 +361,178 @@ class OpenVINOFaceCounter:
     # ─────────────────────────────────────────────────────────────────────
 
     def _capture_loop(self):
+        """
+        Ambil frame dari CCTV secepat mungkin.
+        Selalu overwrite slot dengan frame terbaru — tidak ada queue blocking.
+        """
         interval = 1.0 / getattr(self.config, 'STREAM_FPS', 25)
-        W = getattr(self.config, 'FRAME_WIDTH',  1280)
-        H = getattr(self.config, 'FRAME_HEIGHT',  720)
+        W = getattr(self.config, 'FRAME_WIDTH',  960)
+        H = getattr(self.config, 'FRAME_HEIGHT', 540)
 
         while self.is_running:
             t0 = time.time()
             try:
                 if self.cap is None:
-                    time.sleep(0.1)
+                    time.sleep(0.05)
                     continue
-                ret = self.cap.grab()
-                if not ret:
+
+                # Flush buffer — buang frame lama, ambil yang paling baru
+                for _ in range(3):
+                    self.cap.grab()
+
+                ret, frame = self.cap.retrieve()
+                if not ret or frame is None or frame.size == 0:
                     self._reconnect()
                     continue
-                if not self.frame_queue.full():
-                    ret, frame = self.cap.retrieve()
-                    if ret and frame is not None and frame.size > 0:
-                        frame = cv2.resize(frame, (W, H), interpolation=cv2.INTER_AREA)
-                        self.frame_queue.put(frame)
+
+                # INTER_LINEAR 3x lebih cepat dari INTER_AREA, cukup untuk streaming
+                frame = cv2.resize(frame, (W, H), interpolation=cv2.INTER_LINEAR)
+
+                with self._frame_lock:
+                    self._latest_frame = frame
+
             except Exception as e:
                 print(f"❌ Capture: {e}")
-                time.sleep(1)
+                time.sleep(0.5)
 
             elapsed = time.time() - t0
-            if elapsed < interval:
-                time.sleep(interval - elapsed)
+            sleep_t = interval - elapsed
+            if sleep_t > 0:
+                time.sleep(sleep_t)
 
     def _detection_loop(self):
+        """
+        Jalankan OpenVINO inference pada frame terbaru.
+        Throttle ke DETECTION_FPS agar CPU tidak penuh.
+        """
         detect_interval = 1.0 / self.DETECTION_FPS
-        DW, DH = self.DETECTION_SIZE
-        FW = getattr(self.config, 'FRAME_WIDTH',  1280)
-        FH = getattr(self.config, 'FRAME_HEIGHT',  720)
+        DW, DH          = self.DETECTION_SIZE
+        FW = getattr(self.config, 'FRAME_WIDTH',  960)
+        FH = getattr(self.config, 'FRAME_HEIGHT', 540)
+        scale_x = FW / DW
+        scale_y = FH / DH
 
         while self.is_running:
-            try:
-                if self.frame_queue.empty():
-                    time.sleep(0.01)
-                    continue
-
-                frame = self.frame_queue.get(timeout=0.1)
-                now   = time.time()
-
-                # Throttle detection
-                if now - self.last_detect_ts < detect_interval:
-                    if not self.result_queue.full():
-                        self.result_queue.put((frame, None, now))
-                    continue
-
-                t0 = time.time()
-
-                det_frame = cv2.resize(frame, (DW, DH), interpolation=cv2.INTER_AREA)
-
-                raw_faces = (
-                    self._detect_openvino(det_frame)
-                    if self.use_openvino
-                    else self._detect_haar(det_frame)
-                )
-
-                scale_x = FW / DW
-                scale_y = FH / DH
-
-                validated = []
-                for face in raw_faces:
-                    bx, by, bw, bh = face['box']
-                    sx = int(bx * scale_x)
-                    sy = int(by * scale_y)
-                    sw = int(bw * scale_x)
-                    sh = int(bh * scale_y)
-                    scaled_box = [sx, sy, sw, sh]
-
-                    # ── Blur filter ──────────────────────────────────────
-                    roi = frame[sy:sy+sh, sx:sx+sw]
-                    if roi.size == 0:
-                        continue
-                    blur = calculate_blur_score(roi)
-                    if blur < self.BLUR_THRESH:
-                        continue
-
-                    # ── Frontal filter ───────────────────────────────────
-                    if not self._is_frontal(frame, scaled_box):
-                        continue
-
-                    face['box']  = scaled_box
-                    face['blur'] = blur
-
-                    # ── Embedding (throttled per face later in render) ───
-                    # Extraction dihandle di _render_loop per tracker entry
-                    validated.append(face)
-
-                self.processing_fps = 1.0 / (time.time() - t0) if (time.time() - t0) > 0 else 0
-                self.last_detect_ts = now
-
-                if not self.result_queue.full():
-                    self.result_queue.put((frame, validated, now))
-
-            except Empty:
+            now  = time.time()
+            wait = detect_interval - (now - self.last_detect_ts)
+            if wait > 0:
+                time.sleep(wait)
                 continue
-            except Exception as e:
-                print(f"❌ Detection: {e}")
-                time.sleep(0.1)
+
+            # Ambil frame terbaru (non-blocking)
+            with self._frame_lock:
+                frame = self._latest_frame
+            if frame is None:
+                time.sleep(0.01)
+                continue
+
+            t0 = time.time()
+
+            det_frame = cv2.resize(frame, (DW, DH), interpolation=cv2.INTER_LINEAR)
+            raw_faces = (
+                self._detect_openvino(det_frame)
+                if self.use_openvino
+                else self._detect_haar(det_frame)
+            )
+
+            validated = []
+            for face in raw_faces:
+                bx, by, bw, bh = face['box']
+                sx = int(bx * scale_x)
+                sy = int(by * scale_y)
+                sw = int(bw * scale_x)
+                sh = int(bh * scale_y)
+
+                # Guard: pastikan box dalam batas frame
+                if sx < 0 or sy < 0 or sx + sw > FW or sy + sh > FH:
+                    continue
+
+                roi = frame[sy:sy + sh, sx:sx + sw]
+                if roi.size == 0:
+                    continue
+
+                blur = calculate_blur_score(roi)
+                if blur < self.BLUR_THRESH:
+                    continue
+
+                # Frontal check hanya untuk deteksi dengan confidence rendah (hemat CPU)
+                if face.get('confidence', 0) < 0.70:
+                    if not self._is_frontal(frame, [sx, sy, sw, sh]):
+                        continue
+
+                face['box']  = [sx, sy, sw, sh]
+                face['blur'] = blur
+                validated.append(face)
+
+            self.processing_fps = 1.0 / max(time.time() - t0, 1e-6)
+            self.last_detect_ts = time.time()
+
+            with self._result_lock:
+                self._latest_result = (frame.copy(), validated, now)
 
     def _render_loop(self):
+        """
+        Render frame ke self.frame pada TARGET_FPS.
+        Jika tidak ada result baru, tetap render frame dengan tracker lama.
+        """
+        render_interval = 1.0 / getattr(self.config, 'TARGET_FPS', 20)
+        last_result_ts  = 0.0
+
         while self.is_running:
-            try:
-                if self.result_queue.empty():
-                    time.sleep(0.005)
-                    continue
+            t0 = time.time()
 
-                frame, faces, ts = self.result_queue.get(timeout=0.1)
-                now = time.time()
+            with self._result_lock:
+                result = self._latest_result
 
-                # Update tracker jika ada detection baru
+            if result is None:
+                time.sleep(0.01)
+                continue
+
+            frame, faces, ts = result
+
+            if ts == last_result_ts:
+                # Result belum berubah — render frame terbaru dengan tracker lama
+                with self._frame_lock:
+                    display_frame = self._latest_frame
+                if display_frame is not None:
+                    draw_frame = display_frame.copy()
+                    self._redraw_trackers(draw_frame)
+                    self.frame = draw_frame
+            else:
+                last_result_ts = ts
                 if faces is not None:
                     self._update_trackers(frame, faces, ts)
-
-                # ── Gambar semua tracker aktif di SETIAP render frame ────────
-                # (bukan hanya saat detection — ini yang bikin box persistent)
-                render_faces = []
-                for entry in list(self.trackers.values()):
-                    # Tracker masih hidup (belum timeout)
-                    if now - entry.last_seen <= self.ID_TIMEOUT:
-                        render_faces.append(entry)
-                        # Gambar box dari last_box yang disimpan saat deteksi terakhir
-                        if entry.last_box is not None:
-                            self._draw_detection(frame, entry.last_box, entry)
-
-                self.current_faces = render_faces
-                self.stats_manager.update(len(render_faces))
+                self._redraw_trackers(frame)
                 self.frame = frame
 
-                # FPS
-                elapsed = time.time() - self.last_frame_ts
-                self.last_frame_ts = time.time()
-                self.frame_times.append(elapsed)
-                if len(self.frame_times) > 5:
-                    avg = sum(self.frame_times) / len(self.frame_times)
-                    self.fps = 1.0 / avg if avg > 0 else 0
+            # Update stats
+            now          = time.time()
+            render_faces = [e for e in self.trackers.values()
+                            if now - e.last_seen <= self.ID_TIMEOUT]
+            self.current_faces = render_faces
+            self.stats_manager.update(len(render_faces))
 
-            except Empty:
-                continue
-            except Exception as e:
-                print(f"❌ Render: {e}")
-                time.sleep(0.1)
+            # Hitung FPS
+            elapsed            = time.time() - self.last_frame_ts
+            self.last_frame_ts = time.time()
+            self.frame_times.append(elapsed)
+            if len(self.frame_times) > 5:
+                avg      = sum(self.frame_times) / len(self.frame_times)
+                self.fps = 1.0 / avg if avg > 0 else 0
+
+            sleep_t = render_interval - (time.time() - t0)
+            if sleep_t > 0:
+                time.sleep(sleep_t)
+
+    def _redraw_trackers(self, frame: np.ndarray):
+        """Gambar semua tracker aktif ke frame."""
+        now = time.time()
+        for entry in list(self.trackers.values()):
+            if now - entry.last_seen <= self.ID_TIMEOUT and entry.last_box is not None:
+                self._draw_detection(frame, entry.last_box, entry)
 
     def _cleanup_loop(self):
+        """Simpan database secara periodik."""
         interval = getattr(self.config, 'CLEANUP_INTERVAL', 300)
         while self.is_running:
             time.sleep(interval)
@@ -515,11 +546,9 @@ class OpenVINOFaceCounter:
     def _update_trackers(self, frame: np.ndarray, faces: list, now: float):
         """
         Match detections ke tracker yang ada.
-        Update state machine.
-        Throttle embedding extraction.
-        Anti-duplicate DB write.
+        Update state machine, throttle embedding, anti-duplicate DB write.
         """
-        # 1) Cleanup stale trackers
+        # 1) Hapus tracker yang sudah timeout
         stale = [fid for fid, e in self.trackers.items()
                  if now - e.last_seen > self.ID_TIMEOUT]
         for fid in stale:
@@ -529,15 +558,14 @@ class OpenVINOFaceCounter:
         used_ids = set()
 
         for face in faces:
-            box = face['box']
+            box        = face['box']
             x, y, w, h = box
-            cx = x + w // 2
-            cy = y + h // 2
+            cx         = x + w // 2
+            cy         = y + h // 2
             quality    = face.get('quality',    0.0)
-            confidence = face.get('confidence', 0.0)
             blur       = face.get('blur',       0.0)
 
-            # ── 2) Match to existing tracker ────────────────────────────
+            # 2) Match ke tracker yang sudah ada
             best_id    = None
             best_score = float('inf')
 
@@ -545,23 +573,20 @@ class OpenVINOFaceCounter:
                 if fid in used_ids:
                     continue
                 pos_dist = np.hypot(cx - entry.cx, cy - entry.cy)
+                emb_sim  = 0.0
 
-                # Embedding similarity (jika tersedia)
-                emb_sim = 0.0
-                if (face.get('embedding') is not None
-                        and entry.embedding is not None):
+                if face.get('embedding') is not None and entry.embedding is not None:
                     emb_sim = cosine_similarity(face['embedding'], entry.embedding)
 
-                if self.use_embeddings and emb_sim > self.EMBED_SIM_THRESH:
-                    score = pos_dist * (1.0 - emb_sim)
-                else:
-                    score = pos_dist
+                score = (pos_dist * (1.0 - emb_sim)
+                         if self.use_embeddings and emb_sim > self.EMBED_SIM_THRESH
+                         else pos_dist)
 
                 if score < best_score:
                     best_score = score
                     best_id    = fid
 
-            # ── 3) Assign or create tracker ─────────────────────────────
+            # 3) Assign ke tracker lama atau buat baru
             if best_id is not None and best_score < self.MAX_POSITION_DIST:
                 entry = self.trackers[best_id]
             else:
@@ -573,11 +598,11 @@ class OpenVINOFaceCounter:
             entry.quality_hist.append(quality)
             entry.blur_hist.append(blur)
             entry.advance_status()
-            entry.last_box = box                          # ← simpan box terakhir untuk redraw
+            entry.last_box = box
             self.track_history[entry.face_id].append((float(cx), float(cy)))
             used_ids.add(entry.face_id)
 
-            # ── 4) Throttled embedding extraction ───────────────────────
+            # 4) Throttled embedding extraction
             if (self.use_embeddings
                     and entry.status in (FaceStatus.VERIFYING, FaceStatus.TRACKING,
                                          FaceStatus.WAJAH_BARU, FaceStatus.SUDAH_TERDETEKSI)
@@ -587,50 +612,54 @@ class OpenVINOFaceCounter:
                     entry.embedding     = emb
                     entry.last_embed_ts = now
 
-            # ── 5) Database logic (ANTI-DUPLICATE) ──────────────────────
+            # 5) Database logic — anti-duplicate
             if entry.status == FaceStatus.VERIFYING and entry.is_verified():
                 if self.use_embeddings and entry.embedding is not None:
                     db_id, similarity = self.face_db.find_matching_face(entry.embedding)
 
                     if db_id is not None and similarity >= self.EMBED_SIM_THRESH:
-                        # Wajah dikenal → JANGAN save ulang
                         entry.status = FaceStatus.SUDAH_TERDETEKSI
                         entry.db_id  = db_id
                         print(f"👤 Sudah terdeteksi: {db_id} (sim={similarity:.3f})")
                     else:
-                        # Wajah baru → simpan satu kali
                         entry.status = FaceStatus.WAJAH_BARU
-                        self.face_db.add_or_update_face(str(entry.face_id), entry.embedding)
+                        unique_id = f"{entry.face_id}_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}"
+                        self.face_db.add_or_update_face(unique_id, entry.embedding)
                         self.stats_manager.add_unique_person()
                         print(f"✨ WAJAH BARU #{entry.face_id} "
                               f"| quality={entry.avg_quality():.2f} "
                               f"| blur={entry.avg_blur():.0f} "
                               f"| total={self.stats_manager.total_detected}")
                 else:
-                    # No embedding — minimal tracking
                     entry.status = FaceStatus.WAJAH_BARU
                     self.stats_manager.add_unique_person()
 
             elif entry.status in (FaceStatus.WAJAH_BARU, FaceStatus.SUDAH_TERDETEKSI):
                 entry.status = FaceStatus.TRACKING
 
-            # ── 6) Draw TIDAK dilakukan di sini ─────────────────────────
-            # Drawing dihandle di _render_loop agar box tampil di setiap
-            # frame render (20 FPS), bukan hanya saat detection (3 FPS)
-
     # ─────────────────────────────────────────────────────────────────────
     # DETECTORS
     # ─────────────────────────────────────────────────────────────────────
 
     def _detect_openvino(self, det_frame: np.ndarray) -> list:
-        """OpenVINO inference — returns list of face dicts."""
+        """OpenVINO inference dengan pre-allocated input buffer."""
         try:
             h, w = det_frame.shape[:2]
-            inp   = cv2.resize(det_frame, (self.ov_w, self.ov_h))
-            inp   = inp.transpose((2, 0, 1))
-            inp   = np.expand_dims(inp, 0).astype(np.float32)
 
-            results    = self.compiled_model([inp])
+            inp = (cv2.resize(det_frame, (self.ov_w, self.ov_h),
+                              interpolation=cv2.INTER_LINEAR)
+                   if h != self.ov_h or w != self.ov_w
+                   else det_frame)
+
+            # Reuse buffer — hindari alokasi np.array baru setiap frame
+            if self._ov_input_buf is None:
+                self._ov_input_buf = np.empty(
+                    (1, self.ov_c, self.ov_h, self.ov_w), dtype=np.float32)
+
+            np.copyto(self._ov_input_buf[0],
+                      inp.transpose(2, 0, 1).astype(np.float32))
+
+            results    = self.compiled_model([self._ov_input_buf])
             detections = results[self.output_layer]
 
             faces = []
@@ -643,9 +672,10 @@ class OpenVINOFaceCounter:
                 ymin = max(0, int(det[4] * h))
                 xmax = min(w, int(det[5] * w))
                 ymax = min(h, int(det[6] * h))
-                bw, bh = xmax - xmin, ymax - ymin
+                bw   = xmax - xmin
+                bh   = ymax - ymin
 
-                if bw < 15 or bh < 15:   # ↓ dari 20 → deteksi wajah kecil 8 meter
+                if bw < 15 or bh < 15:
                     continue
 
                 quality = self._validate_quality(det_frame, xmin, ymin, bw, bh, conf)
@@ -670,8 +700,6 @@ class OpenVINOFaceCounter:
             gray = cv2.cvtColor(det_frame, cv2.COLOR_BGR2GRAY)
             gray = cv2.equalizeHist(gray)
 
-            # minNeighbors=3 (↓ dari 5) agar wajah jauh/miring tidak di-skip
-            # minSize=(20,20) untuk wajah kecil di jarak 8m
             boxes = self.face_cascade.detectMultiScale(
                 gray, scaleFactor=1.05, minNeighbors=3,
                 minSize=(20, 20), maxSize=(500, 500))
@@ -699,29 +727,24 @@ class OpenVINOFaceCounter:
     def _validate_quality(self, frame, x, y, w, h, conf) -> float:
         score = 0.0
 
-        # Confidence
         if   conf > 0.95: score += 0.30
         elif conf > 0.90: score += 0.25
         elif conf > 0.85: score += 0.20
 
-        # Aspect ratio
         ar = w / float(h)
         if 0.70 < ar < 1.30:
             score += 0.20
 
-        # Relative size — wajah 8 meter bisa sangat kecil
         rel = (w * h) / (frame.shape[0] * frame.shape[1])
-        if 0.001 < rel < 0.60:   # ↓ 0.001 untuk wajah sangat jauh
+        if 0.001 < rel < 0.60:
             score += 0.20
 
-        # Margin
         mg = 10
-        if x > mg and y > mg and x+w < frame.shape[1]-mg and y+h < frame.shape[0]-mg:
+        if x > mg and y > mg and x + w < frame.shape[1] - mg and y + h < frame.shape[0] - mg:
             score += 0.15
 
-        # Brightness
         try:
-            roi = frame[y:y+h, x:x+w]
+            roi = frame[y:y + h, x:x + w]
             if roi.size > 0:
                 bri = np.mean(cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY))
                 if 35 < bri < 225:
@@ -735,14 +758,14 @@ class OpenVINOFaceCounter:
         """
         Multi-check frontal validation:
           1. Aspect ratio
-          2. Eye detection + symmetry (y-level & x-separation)
+          2. Eye detection + symmetry
           3. Frontal cascade confirmation
         """
         x, y, w, h = box
-        if x < 0 or y < 0 or x+w > frame.shape[1] or y+h > frame.shape[0]:
+        if x < 0 or y < 0 or x + w > frame.shape[1] or y + h > frame.shape[0]:
             return False
         try:
-            roi  = frame[y:y+h, x:x+w]
+            roi = frame[y:y + h, x:x + w]
             if roi.size == 0:
                 return False
             gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
@@ -759,25 +782,22 @@ class OpenVINOFaceCounter:
             if self.eye_cascade is not None:
                 eyes = self.eye_cascade.detectMultiScale(
                     gray, scaleFactor=1.1, minNeighbors=3,
-                    minSize=(int(w*0.08), int(h*0.08)),
-                    maxSize=(int(w*0.45), int(h*0.45)))
+                    minSize=(int(w * 0.08), int(h * 0.08)),
+                    maxSize=(int(w * 0.45), int(h * 0.45)))
 
                 if len(eyes) >= 2:
                     score += 1.0
-                    ec = [(ex + ew//2, ey + eh//2) for (ex, ey, ew, eh) in eyes[:2]]
+                    ec = [(ex + ew // 2, ey + eh // 2) for (ex, ey, ew, eh) in eyes[:2]]
 
-                    # y-level symmetry
                     y_diff = abs(ec[0][1] - ec[1][1])
                     if y_diff < h * 0.15:
                         score += 0.5
 
-                    # x-separation (eyes should be ~30–70% of face width apart)
                     x_sep = abs(ec[0][0] - ec[1][0])
                     if 0.25 * w < x_sep < 0.70 * w:
                         score += 0.5
 
-                    # Nose center estimation (eyes center x ≈ face center x)
-                    eye_mid_x = (ec[0][0] + ec[1][0]) / 2
+                    eye_mid_x  = (ec[0][0] + ec[1][0]) / 2
                     face_mid_x = w / 2
                     if abs(eye_mid_x - face_mid_x) < w * 0.20:
                         score += 0.5
@@ -836,36 +856,30 @@ class OpenVINOFaceCounter:
 
     def _draw_detection(self, frame: np.ndarray, box: list, entry: TrackerEntry):
         x, y, w, h = box
-        status = entry.status
-        color  = STATUS_COLOR.get(status, (200, 200, 200))
-
-        # ── Corner bracket box (tidak ada garis panjang, hanya sudut) ──────
+        status     = entry.status
+        color      = STATUS_COLOR.get(status, (200, 200, 200))
         corner_len = max(12, min(w // 4, 30))
         thickness  = 2
 
-        # top-left
-        cv2.line(frame, (x, y), (x + corner_len, y), color, thickness)
-        cv2.line(frame, (x, y), (x, y + corner_len), color, thickness)
-        # top-right
-        cv2.line(frame, (x+w, y), (x+w - corner_len, y), color, thickness)
-        cv2.line(frame, (x+w, y), (x+w, y + corner_len), color, thickness)
-        # bottom-left
-        cv2.line(frame, (x, y+h), (x + corner_len, y+h), color, thickness)
-        cv2.line(frame, (x, y+h), (x, y+h - corner_len), color, thickness)
-        # bottom-right
-        cv2.line(frame, (x+w, y+h), (x+w - corner_len, y+h), color, thickness)
-        cv2.line(frame, (x+w, y+h), (x+w, y+h - corner_len), color, thickness)
+        # Corner bracket box
+        cv2.line(frame, (x, y),         (x + corner_len, y),         color, thickness)
+        cv2.line(frame, (x, y),         (x, y + corner_len),         color, thickness)
+        cv2.line(frame, (x + w, y),     (x + w - corner_len, y),     color, thickness)
+        cv2.line(frame, (x + w, y),     (x + w, y + corner_len),     color, thickness)
+        cv2.line(frame, (x, y + h),     (x + corner_len, y + h),     color, thickness)
+        cv2.line(frame, (x, y + h),     (x, y + h - corner_len),     color, thickness)
+        cv2.line(frame, (x + w, y + h), (x + w - corner_len, y + h), color, thickness)
+        cv2.line(frame, (x + w, y + h), (x + w, y + h - corner_len), color, thickness)
 
-        # ── Label ────────────────────────────────────────────────────────────
-        label = f"#{entry.face_id} {status.value}"
+        # Label
+        label       = f"#{entry.face_id} {status.value}"
         (lw, lh), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-        ly = max(lh + 8, y)
-        # Background label semi-transparan feel: kotak kecil di atas box
+        ly          = max(lh + 8, y)
         cv2.rectangle(frame, (x, ly - lh - 6), (x + lw + 8, ly + 2), color, -1)
         cv2.putText(frame, label, (x + 4, ly - 2),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 0), 1, cv2.LINE_AA)
 
-        # ── Thin quality bar di bawah box ────────────────────────────────────
+        # Blur quality bar
         bar_y = y + h + 3
         if bar_y + 4 < frame.shape[0]:
             bar_fill = int(w * min(1.0, entry.avg_blur() / 250))
@@ -873,7 +887,7 @@ class OpenVINOFaceCounter:
             cv2.rectangle(frame, (x, bar_y), (x + bar_fill, bar_y + 3), color, -1)
 
     def _draw_trail(self, frame: np.ndarray, face_id: int):
-        # Trail DINONAKTIFKAN sesuai permintaan user
+        # Trail dinonaktifkan
         pass
 
     # ─────────────────────────────────────────────────────────────────────
@@ -889,13 +903,13 @@ class OpenVINOFaceCounter:
 
     def get_frame(self) -> np.ndarray:
         if self.frame is None:
-            W = getattr(self.config, 'FRAME_WIDTH',  1280)
-            H = getattr(self.config, 'FRAME_HEIGHT',  720)
+            W = getattr(self.config, 'FRAME_WIDTH',  960)
+            H = getattr(self.config, 'FRAME_HEIGHT', 540)
             return np.zeros((H, W, 3), dtype=np.uint8)
         return self.frame.copy()
 
     def get_frame_jpeg(self) -> bytes:
-        q = getattr(self.config, 'JPEG_QUALITY', 80)
+        q    = getattr(self.config, 'JPEG_QUALITY', 80)
         _, buf = cv2.imencode('.jpg', self.get_frame(),
                               [cv2.IMWRITE_JPEG_QUALITY, q,
                                cv2.IMWRITE_JPEG_OPTIMIZE, 1])
@@ -904,14 +918,14 @@ class OpenVINOFaceCounter:
     def get_statistics(self) -> dict:
         stats = self.stats_manager.get_stats()
         stats.update({
-            'fps':              round(self.fps, 1),
-            'processing_fps':  round(self.processing_fps, 1),
-            'active_trackers': len(self.trackers),
-            'current_faces':   len(self.current_faces),
-            'timestamp':       datetime.now().isoformat(),
-            'detection_method': self.detector_type,
+            'fps':                round(self.fps, 1),
+            'processing_fps':     round(self.processing_fps, 1),
+            'active_trackers':    len(self.trackers),
+            'current_faces':      len(self.current_faces),
+            'timestamp':          datetime.now().isoformat(),
+            'detection_method':   self.detector_type,
             'embedding_tracking': self.use_embeddings,
-            'database_size':   len(self.face_db.faces),
+            'database_size':      len(self.face_db.faces),
         })
         return stats
 
@@ -934,7 +948,7 @@ class OpenVINOFaceCounter:
         self.stats_manager.reset_daily()
         self.trackers.clear()
         self.current_faces = []
-        self.next_id = 0
+        self.next_id       = 0
         self.face_db.save_database()
         print("🔄 Daily stats reset (database preserved)")
 

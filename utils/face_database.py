@@ -89,7 +89,7 @@ class FaceDatabase:
 
     # ── add / update ──────────────────────────────────────────────────────
     def add_or_update_face(self, face_id: str, embedding,
-                           thumbnail_b64: Optional[str] = None) -> tuple:
+                        thumbnail_b64: Optional[str] = None) -> tuple:
         if embedding is None: return False, None, 0
         try:
             emb = np.array(embedding, dtype=np.float32)
@@ -102,6 +102,7 @@ class FaceDatabase:
         with self._lock:
             with self._conn() as c:
                 if matched_id:
+                    # Wajah sudah ada di DB — update embedding
                     row = c.execute(
                         "SELECT embedding, detection_count FROM faces WHERE id=?",
                         (matched_id,)).fetchone()
@@ -115,13 +116,33 @@ class FaceDatabase:
                     threading.Thread(target=self._fire,
                         args=(self._on_updated_face_cbs, matched_id, meta), daemon=True).start()
                     return False, matched_id, similarity
+
                 else:
+                    # Wajah baru — INSERT OR IGNORE untuk mencegah race condition
                     norm = _normalize(emb)
                     c.execute(
-                        "INSERT INTO faces (id,embedding,first_seen,last_seen,detection_count,thumbnail_b64) "
+                        "INSERT OR IGNORE INTO faces "
+                        "(id,embedding,first_seen,last_seen,detection_count,thumbnail_b64) "
                         "VALUES (?,?,?,?,1,?)",
                         (face_id, _emb_to_blob(norm), now, now, thumbnail_b64))
                     c.commit()
+
+                    if c.execute("SELECT changes()").fetchone()[0] == 0:
+                        # ID bentrok (race condition) — perlakukan sebagai update
+                        row = c.execute(
+                            "SELECT embedding, detection_count FROM faces WHERE id=?",
+                            (face_id,)).fetchone()
+                        if row:
+                            merged = _normalize(0.9 * _blob_to_emb(row['embedding']) + 0.1 * norm)
+                            c.execute(
+                                "UPDATE faces SET embedding=?, last_seen=?, detection_count=? WHERE id=?",
+                                (_emb_to_blob(merged), now, row['detection_count']+1, face_id))
+                            c.commit()
+                        meta = self._row_to_meta(c, face_id)
+                        threading.Thread(target=self._fire,
+                            args=(self._on_updated_face_cbs, face_id, meta), daemon=True).start()
+                        return False, face_id, 1.0
+
                     total = c.execute("SELECT COUNT(*) FROM faces").fetchone()[0]
                     meta = {
                         'id': face_id, 'first_seen': now, 'last_seen': now,

@@ -8,1024 +8,737 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
       font-family: 'Outfit', sans-serif;
-      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
-      color: #e2e8f0;
+      background: #f1f5f9;
+      color: #1e293b;
       overflow-x: hidden;
+      min-height: 100vh;
     }
 
-    /* Animated Background */
-    .animated-bg {
+    /* ── SUBTLE PAGE PATTERN ── */
+    body::before {
+      content: '';
       position: fixed;
-      width: 100%;
-      height: 100%;
-      top: 0;
-      left: 0;
+      inset: 0;
       z-index: 0;
-      opacity: 0.03;
-      background-image: 
-        radial-gradient(circle at 20% 50%, rgba(56, 189, 248, 0.3) 0%, transparent 50%),
-        radial-gradient(circle at 80% 80%, rgba(34, 211, 238, 0.3) 0%, transparent 50%),
-        radial-gradient(circle at 40% 20%, rgba(147, 51, 234, 0.3) 0%, transparent 50%);
-      animation: gradientShift 15s ease infinite;
+      background-image:
+        radial-gradient(circle at 15% 20%, rgba(59,130,246,0.07) 0%, transparent 45%),
+        radial-gradient(circle at 85% 75%, rgba(168,85,247,0.06) 0%, transparent 45%),
+        radial-gradient(circle at 50% 50%, rgba(16,185,129,0.04) 0%, transparent 60%);
+      pointer-events: none;
     }
 
-    @keyframes gradientShift {
-      0%, 100% { transform: translate(0, 0) scale(1); }
-      50% { transform: translate(-5%, 5%) scale(1.1); }
-    }
-
-    /* Glass Morphism Cards */
-    .glass-card {
-      background: rgba(30, 41, 59, 0.7);
-      backdrop-filter: blur(20px);
-      border: 1px solid rgba(148, 163, 184, 0.1);
-      border-radius: 24px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .glass-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
-      border-color: rgba(56, 189, 248, 0.3);
-    }
-
-    /* Stat Cards with Gradient Borders */
-    .stat-card {
-      position: relative;
-      background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(51, 65, 85, 0.9) 100%);
-      backdrop-filter: blur(20px);
+    /* ── NAVBAR ── */
+    .navbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      margin: 12px 16px 0;
+      background: #ffffff;
       border-radius: 20px;
-      padding: 1.5rem;
-      overflow: hidden;
-      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.07), 0 6px 20px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
     }
 
-    .stat-card::before {
+    .navbar-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 20px;
+      height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .navbar-brand { display: flex; align-items: center; gap: 12px; flex-shrink: 0; min-width: 0; }
+    .navbar-logo { height: 40px; width: auto; object-fit: contain; max-width: 140px; flex-shrink: 0; }
+    .navbar-title {
+      font-size: 1.05rem; font-weight: 700;
+      background: linear-gradient(135deg, #ea580c 0%, #ca8a04 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      white-space: nowrap;
+    }
+    .navbar-subtitle { font-size: 0.72rem; color: #94a3b8; white-space: nowrap; margin-top: 1px; }
+
+    .navbar-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+    .live-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px;
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      border-radius: 50px; font-weight: 600; font-size: 0.75rem; color: #fff;
+      box-shadow: 0 2px 10px rgba(239,68,68,0.35);
+      animation: livePulse 2s ease-in-out infinite;
+    }
+    @keyframes livePulse {
+      0%,100% { box-shadow: 0 2px 10px rgba(239,68,68,0.35); }
+      50%      { box-shadow: 0 2px 18px rgba(239,68,68,0.6); }
+    }
+    .live-dot { width: 7px; height: 7px; background: #fff; border-radius: 50%; animation: blink 1.5s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 5px 12px;
+      background: #f0fdf4; border: 1px solid #bbf7d0;
+      border-radius: 50px; font-size: 0.78rem; color: #15803d; font-weight: 500;
+    }
+    .status-dot {
+      width: 8px; height: 8px; background: #22c55e; border-radius: 50%; flex-shrink: 0;
+      box-shadow: 0 0 0 3px rgba(34,197,94,.2);
+      animation: sDot 2s ease-in-out infinite;
+    }
+    @keyframes sDot {
+      0%,100%{ box-shadow:0 0 0 3px rgba(34,197,94,.2); }
+      50%    { box-shadow:0 0 0 5px rgba(34,197,94,.1); }
+    }
+
+    .navbar-btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 8px 16px;
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: #fff; border-radius: 12px; font-weight: 600; font-size: 0.82rem;
+      text-decoration: none; border: none; cursor: pointer;
+      box-shadow: 0 2px 8px rgba(59,130,246,0.3);
+      transition: all .25s ease;
+      white-space: nowrap;
+    }
+    .navbar-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(59,130,246,.45); background: linear-gradient(135deg,#2563eb,#1d4ed8); }
+
+    @media(max-width:480px){
+      .navbar-subtitle,.status-label,.btn-label,.live-label{ display:none; }
+      .navbar-title{ font-size:.88rem; }
+      .status-pill{ padding:5px 8px; }
+      .navbar-btn{ padding:8px 10px; }
+      .live-badge{ padding:5px 8px; }
+      .navbar-logo{ height:32px; max-width:100px; }
+    }
+    @media(max-width:360px){
+      .navbar-inner{ padding:0 12px; height:60px; }
+      .navbar{ margin:8px 8px 0; border-radius:16px; }
+    }
+
+    /* ── CARDS ── */
+    .card {
+      background: #ffffff;
+      border-radius: 20px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06);
+      transition: all .3s cubic-bezier(.4,0,.2,1);
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08), 0 12px 32px rgba(0,0,0,0.1);
+      border-color: #bfdbfe;
+    }
+
+    /* ── STAT CARDS ── */
+    .stat-card {
+      background: #ffffff;
+      border-radius: 20px;
+      padding: 1.4rem;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06);
+      transition: all .4s cubic-bezier(.4,0,.2,1);
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card::after {
       content: '';
       position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
+      inset: 0;
       border-radius: 20px;
-      padding: 2px;
-      background: linear-gradient(135deg, #3b82f6, #8b5cf6, #ec4899);
-      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
       opacity: 0;
-      transition: opacity 0.4s ease;
+      transition: opacity .35s ease;
+      background: linear-gradient(135deg, rgba(59,130,246,0.04), rgba(139,92,246,0.04));
     }
+    .stat-card:hover { transform: translateY(-5px) scale(1.015); box-shadow: 0 8px 24px rgba(0,0,0,0.12); border-color: #bfdbfe; }
+    .stat-card:hover::after { opacity: 1; }
 
-    .stat-card:hover::before {
-      opacity: 1;
-    }
-
-    .stat-card:hover {
-      transform: translateY(-6px) scale(1.02);
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-    }
-
-    /* Icon Glow Effect */
-    .icon-glow {
-      filter: drop-shadow(0 0 8px currentColor);
-      animation: iconPulse 2s ease-in-out infinite;
-    }
-
-    @keyframes iconPulse {
-      0%, 100% { filter: drop-shadow(0 0 8px currentColor); }
-      50% { filter: drop-shadow(0 0 16px currentColor); }
-    }
-
-    /* Number Animation */
     .stat-number {
       font-family: 'JetBrains Mono', monospace;
       font-weight: 700;
-      font-size: 2.5rem;
-      background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      font-size: 2.4rem;
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
       line-height: 1.2;
-      animation: numberGlow 3s ease-in-out infinite;
     }
 
-    @keyframes numberGlow {
-      0%, 100% { filter: brightness(1); }
-      50% { filter: brightness(1.3); }
+    .icon-wrap {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 48px; height: 48px; border-radius: 14px;
+      flex-shrink: 0;
     }
 
-    /* Video Stream Container */
-    .video-container {
-      position: relative;
-      border-radius: 24px;
-      overflow: hidden;
-      background: #000;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
-    }
-
-    .video-container::before {
-      content: '';
-      position: absolute;
-      top: -2px;
-      left: -2px;
-      right: -2px;
-      bottom: -2px;
-      background: linear-gradient(45deg, #3b82f6, #8b5cf6, #ec4899, #3b82f6);
-      background-size: 300% 300%;
-      border-radius: 24px;
-      z-index: -1;
-      animation: borderGradient 4s ease infinite;
-    }
-
-    @keyframes borderGradient {
-      0%, 100% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-    }
-
-    .video-stream {
-      width: 100%;
-      height: auto;
-      display: block;
-      border-radius: 20px;
-    }
-
-    /* Live Badge */
-    .live-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.5rem 1rem;
-      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-      border-radius: 50px;
-      font-weight: 600;
-      font-size: 0.875rem;
-      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
-      animation: livePulse 2s ease-in-out infinite;
-    }
-
-    @keyframes livePulse {
-      0%, 100% { box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4); }
-      50% { box-shadow: 0 4px 20px rgba(239, 68, 68, 0.8); }
-    }
-
-    .live-dot {
-      width: 8px;
-      height: 8px;
-      background: white;
-      border-radius: 50%;
-      animation: blink 1.5s infinite;
-    }
-
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
-    }
-
-    /* Button Styles */
-    .btn-primary {
-      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-      color: white;
-      padding: 0.75rem 1.5rem;
-      border-radius: 12px;
-      font-weight: 600;
-      border: none;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-    }
-
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 20px rgba(59, 130, 246, 0.5);
-      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-    }
-
-    .btn-danger {
-      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
-    }
-
-    .btn-danger:hover {
-      background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
-      box-shadow: 0 8px 20px rgba(239, 68, 68, 0.5);
-    }
-
-    .btn-success {
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-    }
-
-    .btn-success:hover {
-      background: linear-gradient(135deg, #059669 0%, #047857 100%);
-      box-shadow: 0 8px 20px rgba(16, 185, 129, 0.5);
-    }
-
-    /* Toggle Switch */
-    .toggle-switch {
-      position: relative;
-      width: 60px;
-      height: 32px;
-      background: #475569;
-      border-radius: 50px;
-      cursor: pointer;
-      transition: all 0.3s ease;
-    }
-
-    .toggle-switch.active {
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    }
-
-    .toggle-slider {
-      position: absolute;
-      top: 4px;
-      left: 4px;
-      width: 24px;
-      height: 24px;
-      background: white;
-      border-radius: 50%;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    }
-
-    .toggle-switch.active .toggle-slider {
-      transform: translateX(28px);
-    }
-
-    /* Progress Bar */
-    .progress-bar {
-      height: 8px;
-      background: rgba(71, 85, 105, 0.5);
-      border-radius: 50px;
-      overflow: hidden;
-      position: relative;
-    }
-
+    /* ── PROGRESS BAR ── */
+    .progress-bar { height: 6px; background: #e2e8f0; border-radius: 50px; overflow: hidden; }
     .progress-fill {
       height: 100%;
       background: linear-gradient(90deg, #3b82f6, #8b5cf6);
       border-radius: 50px;
-      transition: width 0.5s ease;
-      position: relative;
-      overflow: hidden;
+      transition: width .5s ease;
+      position: relative; overflow: hidden;
     }
-
     .progress-fill::after {
       content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+      position: absolute; inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent);
       animation: shimmer 2s infinite;
     }
+    @keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
 
-    @keyframes shimmer {
-      0% { transform: translateX(-100%); }
-      100% { transform: translateX(100%); }
+    /* ── VIDEO ── */
+    .video-container {
+      position: relative; border-radius: 16px; overflow: hidden;
+      background: #0f172a;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
     }
-
-    /* Chart Container */
-    .chart-container {
-      position: relative;
-      height: 300px;
-      padding: 1.5rem;
+    .video-container::before {
+      content: '';
+      position: absolute; top:-2px;left:-2px;right:-2px;bottom:-2px;
+      background: linear-gradient(45deg,#3b82f6,#8b5cf6,#ec4899,#3b82f6);
+      background-size: 300% 300%;
+      border-radius: 18px; z-index: -1;
+      animation: borderAnim 4s ease infinite;
     }
+    @keyframes borderAnim { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+    .video-stream { width: 100%; height: auto; display: block; border-radius: 14px; }
 
-    /* Status Indicators */
-    .status-online {
-      width: 12px;
-      height: 12px;
-      background: #10b981;
-      border-radius: 50%;
-      box-shadow: 0 0 12px #10b981;
-      animation: statusPulse 2s ease-in-out infinite;
-    }
-
-    @keyframes statusPulse {
-      0%, 100% { box-shadow: 0 0 12px #10b981; }
-      50% { box-shadow: 0 0 20px #10b981; }
-    }
-
-    /* Mobile Responsive */
-    @media (max-width: 768px) {
-      .stat-number {
-        font-size: 2rem;
-      }
-
-      .chart-container {
-        height: 250px;
-        padding: 1rem;
-      }
-
-      .glass-card {
-        border-radius: 16px;
-      }
-
-      .stat-card {
-        padding: 1rem;
-      }
-    }
-
-    /* Loading Animation */
-    .loading-spinner {
-      width: 40px;
-      height: 40px;
-      border: 4px solid rgba(148, 163, 184, 0.2);
-      border-top-color: #3b82f6;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    /* Notification Toast */
-    .toast {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: rgba(30, 41, 59, 0.95);
-      backdrop-filter: blur(20px);
-      border-radius: 12px;
-      padding: 1rem 1.5rem;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-      border-left: 4px solid #3b82f6;
-      z-index: 1000;
-      animation: slideIn 0.3s ease;
-    }
-
-    @keyframes slideIn {
-      from { transform: translateX(400px); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
-
-    /* FPS Monitor */
+    /* ── FPS MONITOR ── */
     .fps-monitor {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.875rem;
-      padding: 0.5rem 1rem;
-      background: rgba(0, 0, 0, 0.6);
-      border-radius: 8px;
-      border: 1px solid rgba(59, 130, 246, 0.3);
+      font-size: 0.8rem;
+      padding: 6px 14px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      color: #475569;
     }
 
-    /* Scrollbar Styling */
-    ::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
+    /* ── TOGGLE ── */
+    .toggle-switch {
+      position: relative; width: 56px; height: 30px;
+      background: #cbd5e1; border-radius: 50px;
+      cursor: pointer; transition: all .3s ease;
+    }
+    .toggle-switch.active { background: linear-gradient(135deg, #10b981, #059669); }
+    .toggle-slider {
+      position: absolute; top: 3px; left: 3px;
+      width: 24px; height: 24px; background: white;
+      border-radius: 50%; transition: all .3s cubic-bezier(.4,0,.2,1);
+      box-shadow: 0 1px 4px rgba(0,0,0,.2);
+    }
+    .toggle-switch.active .toggle-slider { transform: translateX(26px); }
+
+    /* ── BUTTONS ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: .7rem 1.4rem; border-radius: 12px;
+      font-weight: 600; font-size: .9rem;
+      border: none; cursor: pointer;
+      transition: all .25s ease;
+      width: 100%;
+    }
+    .btn-blue {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: white;
+      box-shadow: 0 2px 8px rgba(59,130,246,.25);
+    }
+    .btn-blue:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(59,130,246,.4); background:linear-gradient(135deg,#2563eb,#1d4ed8); }
+    .btn-red {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      color: white;
+      box-shadow: 0 2px 8px rgba(239,68,68,.2);
+    }
+    .btn-red:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(239,68,68,.35); }
+
+    /* ── INFO BOX ── */
+    .info-box {
+      background: linear-gradient(135deg, #eff6ff, #f5f3ff);
+      border: 1px solid #ddd6fe;
+      border-radius: 14px;
+      padding: 1rem;
     }
 
-    ::-webkit-scrollbar-track {
-      background: rgba(71, 85, 105, 0.2);
-      border-radius: 4px;
+    /* ── DIVIDER ── */
+    .divider { border: none; border-top: 1px solid #e2e8f0; margin: 1.25rem 0; }
+
+    /* ── CHART ── */
+    .chart-container { position: relative; height: 280px; }
+
+    /* ── SECTION LABEL ── */
+    .section-label {
+      font-size: .7rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .08em; color: #94a3b8; margin-bottom: .5rem;
     }
 
-    ::-webkit-scrollbar-thumb {
-      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-      border-radius: 4px;
+    /* ── TOAST ── */
+    .toast {
+      position: fixed; top: 20px; right: 20px;
+      background: #ffffff;
+      border-radius: 14px;
+      padding: 1rem 1.5rem;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+      border-left: 4px solid #3b82f6;
+      z-index: 9999;
+      animation: toastIn .3s ease;
+      color: #1e293b;
+      font-weight: 500;
+      font-size: .9rem;
+    }
+    @keyframes toastIn { from{transform:translateX(360px);opacity:0} to{transform:translateX(0);opacity:1} }
+
+    /* ── MOBILE ── */
+    @media(max-width:768px){
+      .stat-number{ font-size:2rem; }
+      .chart-container{ height:220px; }
+      .stat-card{ padding:1rem; }
+      .card{ border-radius:16px; }
     }
 
-    ::-webkit-scrollbar-thumb:hover {
-      background: linear-gradient(135deg, #2563eb, #7c3aed);
-    }
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width:6px; }
+    ::-webkit-scrollbar-track { background:#f1f5f9; }
+    ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:4px; }
+    ::-webkit-scrollbar-thumb:hover { background:#94a3b8; }
   </style>
 </head>
 <body>
-  <div class="animated-bg"></div>
 
-  <!-- Main Container -->
-  <div class="relative z-10 min-h-screen">
-    
-    <!-- Header -->
-    <header class="glass-card mx-4 mt-4 mb-6 sticky top-4 z-50">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
-          
-          <!-- Logo & Title -->
-          <div class="flex items-center gap-3">
-              <img src="https://res.cloudinary.com/djs5pi7ev/image/upload/v1771040875/BAYAN_R_-_SAMPING_HD_PUTIH_nepvgb.png" 
-                  alt="Logo" 
-                  class="h-10 w-auto sm:h-12 object-contain max-w-[150px] sm:max-w-[200px]" />
-              <div>
-              <h1 class="text-xl sm:text-2xl font-bold bg-gradient-to-r from-orange-600 to-yellow-400 bg-clip-text text-transparent">
-                Face Counter Dashboard
-              </h1>
-              <p class="text-xs sm:text-sm text-slate-400">Sistem Monitoring Pengunjung Real-time</p>
-            </div>
-          </div>
-
-          <!-- Status & Actions -->
-          <div class="flex items-center gap-3 flex-wrap justify-center">
-            <div id="liveIndicator" class="live-badge hidden">
-              <span class="live-dot"></span>
-              <span>LIVE</span>
-            </div>
-
-            <div class="flex items-center gap-2 text-sm">
-              <div class="status-online"></div>
-              <span class="text-slate-300">Sistem Aktif</span>
-            </div>
-
-            <a href="/data-pengunjung" 
-               class="btn-primary flex items-center gap-2 text-sm">
-              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
-                <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
-              </svg>
-              Data Pengunjung
-            </a>
-          </div>
+  <!-- ── NAVBAR ── -->
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <div class="navbar-brand">
+        <img src="https://res.cloudinary.com/djs5pi7ev/image/upload/v1774509112/BAYAN_R_-_SAMPING_fgnkyb.png"
+             alt="Logo" class="navbar-logo"
+             onerror="this.style.display='none'" />
+        <div>
+          <div class="navbar-title">Face Counter Dashboard</div>
+          <div class="navbar-subtitle">Sistem Monitoring Pengunjung Real-time</div>
         </div>
       </div>
-    </header>
 
-    <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-      
-      <!-- Statistics Cards Grid -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6 mb-6">
-        
-        <!-- Current Count -->
-        <div class="stat-card">
-          <div class="flex items-center justify-between mb-3">
-            <div class="p-3 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-xl">
-              <svg class="w-6 h-6 text-blue-400 icon-glow" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
-              </svg>
-            </div>
-          </div>
-          <h3 class="text-sm font-medium text-slate-400 mb-1">Pengunjung Saat Ini</h3>
-          <p class="stat-number" id="currentCount">0</p>
-          <div class="progress-bar mt-3">
-            <div class="progress-fill" id="currentProgress" style="width: 0%"></div>
-          </div>
+      <div class="navbar-right">
+        <div id="liveIndicator" class="live-badge hidden">
+          <span class="live-dot"></span>
+          <span class="live-label">LIVE</span>
         </div>
-
-        <!-- Max Count -->
-        <div class="stat-card">
-          <div class="flex items-center justify-between mb-3">
-            <div class="p-3 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-xl">
-              <svg class="w-6 h-6 text-purple-400 icon-glow" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd"/>
-              </svg>
-            </div>
-          </div>
-          <h3 class="text-sm font-medium text-slate-400 mb-1">Maksimal Hari Ini</h3>
-          <p class="stat-number" id="maxCount">0</p>
-          <p class="text-xs text-slate-500 mt-2">Rekor tertinggi</p>
+        <div class="status-pill">
+          <span class="status-dot"></span>
+          <span class="status-label">Sistem Aktif</span>
         </div>
+        <a href="/data-pengunjung" class="navbar-btn">
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20" style="flex-shrink:0">
+            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+            <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
+          </svg>
+          <span class="btn-label">Data Pengunjung</span>
+        </a>
+      </div>
+    </div>
+  </nav>
 
-        <!-- Daily Total -->
-        <div class="stat-card">
-          <div class="flex items-center justify-between mb-3">
-            <div class="p-3 bg-gradient-to-br from-emerald-500/20 to-teal-500/20 rounded-xl">
-              <svg class="w-6 h-6 text-emerald-400 icon-glow" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/>
-              </svg>
-            </div>
-          </div>
-          <h3 class="text-sm font-medium text-slate-400 mb-1">Total Hari Ini</h3>
-          <p class="stat-number" id="dailyTotal">0</p>
-          <p class="text-xs text-slate-500 mt-2">Wajah unik terdeteksi</p>
+  <!-- ── MAIN ── -->
+  <main class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- STAT CARDS -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+
+      <!-- Pengunjung Saat Ini -->
+      <div class="stat-card">
+        <div class="icon-wrap mb-3" style="background:#eff6ff;">
+          <svg width="22" height="22" fill="#3b82f6" viewBox="0 0 20 20">
+            <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
+          </svg>
         </div>
-
-        <!-- Database Faces -->
-        <div class="stat-card">
-          <div class="flex items-center justify-between mb-3">
-            <div class="p-3 bg-gradient-to-br from-orange-500/20 to-amber-500/20 rounded-xl">
-              <svg class="w-6 h-6 text-orange-400 icon-glow" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clip-rule="evenodd"/>
-              </svg>
-            </div>
-          </div>
-          <h3 class="text-sm font-medium text-slate-400 mb-1">Database Wajah</h3>
-          <p class="stat-number" id="databaseFaces">0</p>
-          <p class="text-xs text-slate-500 mt-2">Total tersimpan</p>
+        <p class="section-label">Pengunjung Saat Ini</p>
+        <p class="stat-number" id="currentCount">0</p>
+        <div class="progress-bar mt-3">
+          <div class="progress-fill" id="currentProgress" style="width:0%"></div>
         </div>
-
-        <!-- FPS -->
-        <div class="stat-card">
-          <div class="flex items-center justify-between mb-3">
-            <div class="p-3 bg-gradient-to-br from-rose-500/20 to-pink-500/20 rounded-xl">
-              <svg class="w-6 h-6 text-rose-400 icon-glow" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/>
-              </svg>
-            </div>
-          </div>
-          <h3 class="text-sm font-medium text-slate-400 mb-1">Performa Sistem</h3>
-          <p class="stat-number" id="systemFPS">0</p>
-          <p class="text-xs text-slate-500 mt-2">FPS real-time</p>
-        </div>
-
       </div>
 
-      <!-- Video Stream & Controls -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        
-        <!-- Video Stream (2/3 width on desktop) -->
-        <div class="lg:col-span-2 glass-card p-4 sm:p-6">
-          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
-            <h2 class="text-lg sm:text-xl font-bold text-white">Video Stream Live</h2>
-            <div class="fps-monitor">
-              <span class="text-slate-400">Stream:</span>
-              <span class="text-blue-400" id="streamFPS">0</span>
-              <span class="text-slate-400">FPS</span>
-              <span class="mx-2 text-slate-600">|</span>
-              <span class="text-slate-400">Deteksi:</span>
-              <span class="text-purple-400" id="processingFPS">0</span>
-              <span class="text-slate-400">FPS</span>
-            </div>
-          </div>
+      <!-- Maksimal -->
+      <div class="stat-card">
+        <div class="icon-wrap mb-3" style="background:#faf5ff;">
+          <svg width="22" height="22" fill="#8b5cf6" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd"/>
+          </svg>
+        </div>
+        <p class="section-label">Maksimal Hari Ini</p>
+        <p class="stat-number" id="maxCount">0</p>
+        <p style="font-size:.75rem;color:#94a3b8;margin-top:6px;">Rekor tertinggi</p>
+      </div>
 
-          <div class="video-container">
-            <img id="videoStream" 
-                 src="/video_feed" 
-                 alt="Video Stream" 
-                 class="video-stream"
-                 onerror="handleStreamError()" />
-          </div>
+      <!-- Total Hari Ini -->
+      <div class="stat-card">
+        <div class="icon-wrap mb-3" style="background:#f0fdf4;">
+          <svg width="22" height="22" fill="#10b981" viewBox="0 0 20 20">
+            <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/>
+          </svg>
+        </div>
+        <p class="section-label">Total Hari Ini</p>
+        <p class="stat-number" id="dailyTotal">0</p>
+        <p style="font-size:.75rem;color:#94a3b8;margin-top:6px;">Wajah unik terdeteksi</p>
+      </div>
 
-          <div class="mt-4 flex items-center gap-2 text-sm text-slate-400">
-            <svg class="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-            </svg>
+      <!-- Database -->
+      <div class="stat-card">
+        <div class="icon-wrap mb-3" style="background:#fff7ed;">
+          <svg width="22" height="22" fill="#f97316" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clip-rule="evenodd"/>
+          </svg>
+        </div>
+        <p class="section-label">Database Wajah</p>
+        <p class="stat-number" id="databaseFaces">0</p>
+        <p style="font-size:.75rem;color:#94a3b8;margin-top:6px;">Total tersimpan</p>
+      </div>
+
+      <!-- FPS -->
+      <div class="stat-card">
+        <div class="icon-wrap mb-3" style="background:#fff1f2;">
+          <svg width="22" height="22" fill="#f43f5e" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/>
+          </svg>
+        </div>
+        <p class="section-label">Performa Sistem</p>
+        <p class="stat-number" id="systemFPS">0</p>
+        <p style="font-size:.75rem;color:#94a3b8;margin-top:6px;">FPS real-time</p>
+      </div>
+
+    </div>
+
+    <!-- VIDEO + CONTROL -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- Video -->
+      <div class="card p-5 lg:col-span-2">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <p class="section-label">Live Stream</p>
+            <h2 style="font-size:1.2rem;font-weight:700;color:#1e293b;">Video Stream Live</h2>
+          </div>
+          <div class="fps-monitor">
+            <span style="color:#94a3b8;">Stream:</span>
+            <span style="color:#3b82f6;font-weight:600;" id="streamFPS">0</span>
+            <span style="color:#94a3b8;">FPS</span>
+            <span style="margin:0 8px;color:#cbd5e1;">|</span>
+            <span style="color:#94a3b8;">Deteksi:</span>
+            <span style="color:#8b5cf6;font-weight:600;" id="processingFPS">0</span>
+            <span style="color:#94a3b8;">FPS</span>
+          </div>
+        </div>
+
+        <div class="video-container">
+          <img id="videoStream" src="/video_feed" alt="Video Stream" class="video-stream" onerror="handleStreamError()" />
+        </div>
+
+        <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1" style="font-size:.82rem;color:#64748b;">
+          <span style="display:flex;align-items:center;gap:5px;">
+            <svg width="14" height="14" fill="#10b981" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
             <span id="streamStatus">Stream aktif dan terhubung</span>
-            <span class="mx-2">•</span>
-            <span>Resolusi: <span class="text-blue-400">960x540</span></span>
-            <span class="mx-2">•</span>
-            <span id="activeTrackers">Tracking: <span class="text-purple-400">0</span></span>
-          </div>
-        </div>
-
-        <!-- Control Panel (1/3 width on desktop) -->
-        <div class="glass-card p-4 sm:p-6">
-          <h2 class="text-lg sm:text-xl font-bold text-white mb-4">Panel Kontrol</h2>
-
-          <!-- Detection Toggle -->
-          <div class="mb-6">
-            <div class="flex items-center justify-between mb-3">
-              <span class="text-sm font-medium text-slate-300">Deteksi Wajah</span>
-              <div class="toggle-switch" id="detectionToggle" onclick="toggleDetection()">
-                <div class="toggle-slider"></div>
-              </div>
-            </div>
-            <p class="text-xs text-slate-500">Aktifkan/nonaktifkan sistem deteksi</p>
-          </div>
-
-          <!-- Session Info -->
-          <div class="mb-6 p-4 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-xl border border-blue-500/20">
-            <h3 class="text-sm font-semibold text-slate-300 mb-2">Info Sesi</h3>
-            <div class="space-y-2 text-xs">
-              <div class="flex justify-between">
-                <span class="text-slate-400">Status:</span>
-                <span class="text-green-400 font-medium" id="sessionStatus">Aktif</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-slate-400">Durasi:</span>
-                <span class="text-blue-400 font-mono" id="sessionDuration">00:00:00</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-slate-400">Terakhir Update:</span>
-                <span class="text-purple-400 font-mono" id="lastUpdate">-</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Action Buttons -->
-          <div class="space-y-3">
-            <button onclick="refreshStats()" 
-                    class="w-full btn-primary flex items-center justify-center gap-2">
-              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
-              </svg>
-              Refresh Data
-            </button>
-
-            <button onclick="confirmReset()" 
-                    class="w-full btn-danger flex items-center justify-center gap-2">
-              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
-              </svg>
-              Reset Statistik
-            </button>
-          </div>
-
-          <!-- System Info -->
-          <div class="mt-6 pt-6 border-t border-slate-700">
-            <h3 class="text-sm font-semibold text-slate-300 mb-3">Informasi Sistem</h3>
-            <div class="space-y-2 text-xs">
-              <div class="flex justify-between">
-                <span class="text-slate-400">Metode Deteksi:</span>
-                <span class="text-blue-400 font-medium" id="detectionMethod">OpenVINO</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-slate-400">Embedding:</span>
-                <span class="text-green-400" id="embeddingStatus">Aktif</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-slate-400">Target FPS:</span>
-                <span class="text-purple-400 font-mono">25 FPS</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-slate-400">Resolusi Deteksi:</span>
-                <span class="text-orange-400 font-mono">940x460</span>
-              </div>
-            </div>
-          </div>
+          </span>
+          <span>Resolusi: <strong style="color:#3b82f6;">960×540</strong></span>
+          <span id="activeTrackers">Tracking: <strong style="color:#8b5cf6;">0</strong></span>
         </div>
       </div>
 
-      <!-- Charts Section -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        <!-- Hourly Statistics -->
-        <div class="glass-card p-4 sm:p-6">
-          <h2 class="text-lg sm:text-xl font-bold text-white mb-4">Statistik Per Jam</h2>
-          <div class="chart-container">
-            <canvas id="hourlyChart"></canvas>
+      <!-- Control Panel -->
+      <div class="card p-5 flex flex-col gap-5">
+        <div>
+          <p class="section-label">Panel Kontrol</p>
+          <h2 style="font-size:1.2rem;font-weight:700;color:#1e293b;">Kontrol Sistem</h2>
+        </div>
+
+        <!-- Toggle -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:#f8fafc;border-radius:14px;border:1px solid #e2e8f0;">
+          <div>
+            <p style="font-weight:600;font-size:.9rem;color:#374151;">Deteksi Wajah</p>
+            <p style="font-size:.75rem;color:#94a3b8;margin-top:2px;">Aktifkan / nonaktifkan</p>
+          </div>
+          <div class="toggle-switch active" id="detectionToggle" onclick="toggleDetection()">
+            <div class="toggle-slider"></div>
           </div>
         </div>
 
-        <!-- Detection Timeline -->
-        <div class="glass-card p-4 sm:p-6">
-          <h2 class="text-lg sm:text-xl font-bold text-white mb-4">Timeline Deteksi</h2>
-          <div class="chart-container">
-            <canvas id="timelineChart"></canvas>
+        <!-- Session info -->
+        <div class="info-box">
+          <p class="section-label" style="color:#818cf8;">Info Sesi</p>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:.82rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="color:#64748b;">Status</span>
+              <span id="sessionStatus" style="font-weight:600;color:#10b981;">Aktif</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="color:#64748b;">Durasi</span>
+              <span id="sessionDuration" style="font-family:'JetBrains Mono',monospace;font-weight:600;color:#3b82f6;">00:00:00</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="color:#64748b;">Terakhir Update</span>
+              <span id="lastUpdate" style="font-family:'JetBrains Mono',monospace;color:#8b5cf6;">-</span>
+            </div>
           </div>
+        </div>
+
+        <!-- Buttons -->
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <button onclick="refreshStats()" class="btn btn-blue">
+            <svg width="18" height="18" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+            </svg>
+            Refresh Data
+          </button>
+          <button onclick="confirmReset()" class="btn btn-red">
+            <svg width="18" height="18" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
+            </svg>
+            Reset Statistik
+          </button>
+        </div>
+
+        <hr class="divider" />
+
+        <!-- System info -->
+        <div>
+          <p class="section-label">Informasi Sistem</p>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:.82rem;">
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:#64748b;">Metode Deteksi</span>
+              <span id="detectionMethod" style="font-weight:600;color:#3b82f6;">OpenVINO</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:#64748b;">Embedding</span>
+              <span id="embeddingStatus" style="font-weight:600;color:#10b981;">Aktif</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:#64748b;">Target FPS</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-weight:600;color:#8b5cf6;">25 FPS</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:#64748b;">Resolusi Deteksi</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-weight:600;color:#f97316;">940×460</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- CHARTS -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <div class="card p-5">
+        <p class="section-label">Analitik</p>
+        <h2 style="font-size:1.1rem;font-weight:700;color:#1e293b;margin-bottom:1rem;">Statistik Per Jam</h2>
+        <div class="chart-container">
+          <canvas id="hourlyChart"></canvas>
         </div>
       </div>
 
-    </main>
-  </div>
+      <div class="card p-5">
+        <p class="section-label">Real-time</p>
+        <h2 style="font-size:1.1rem;font-weight:700;color:#1e293b;margin-bottom:1rem;">Timeline Deteksi</h2>
+        <div class="chart-container">
+          <canvas id="timelineChart"></canvas>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
 
   <script>
-    // Global state
     let detectionEnabled = true;
     let sessionStartTime = Date.now();
-    let hourlyChart = null;
-    let timelineChart = null;
+    let hourlyChart = null, timelineChart = null;
     let statsHistory = [];
-    const maxHistoryPoints = 30;
+    const maxHist = 30;
 
-    // Initialize on page load
     document.addEventListener('DOMContentLoaded', () => {
-      initializeCharts();
+      initCharts();
       updateStats();
-      startSessionTimer();
-      
-      // Auto-refresh every 2 seconds
+      startTimer();
       setInterval(updateStats, 2000);
-      
-      // Chart update every 5 seconds
       setInterval(updateCharts, 5000);
     });
 
-    // Initialize Charts
-    function initializeCharts() {
-      const chartOptions = {
+    function initCharts() {
+      const gridColor = 'rgba(226,232,240,0.8)';
+      const tickColor = '#94a3b8';
+      const baseOpts = {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: false
-          }
-        },
+        plugins: { legend: { display: false } },
         scales: {
-          y: {
-            beginAtZero: true,
-            grid: {
-              color: 'rgba(148, 163, 184, 0.1)'
-            },
-            ticks: {
-              color: '#94a3b8'
-            }
-          },
-          x: {
-            grid: {
-              color: 'rgba(148, 163, 184, 0.1)'
-            },
-            ticks: {
-              color: '#94a3b8'
-            }
-          }
+          y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor } },
+          x: { grid: { color: gridColor }, ticks: { color: tickColor } }
         }
       };
 
-      // Hourly Chart
-      const hourlyCtx = document.getElementById('hourlyChart').getContext('2d');
-      hourlyChart = new Chart(hourlyCtx, {
+      hourlyChart = new Chart(document.getElementById('hourlyChart').getContext('2d'), {
         type: 'bar',
         data: {
-          labels: Array.from({length: 24}, (_, i) => `${i}:00`),
+          labels: Array.from({length:24},(_,i)=>`${i}:00`),
           datasets: [{
-            label: 'Pengunjung',
             data: new Array(24).fill(0),
-            backgroundColor: 'rgba(59, 130, 246, 0.5)',
-            borderColor: 'rgba(59, 130, 246, 1)',
+            backgroundColor: 'rgba(59,130,246,0.15)',
+            borderColor: 'rgba(59,130,246,.8)',
             borderWidth: 2,
             borderRadius: 8
           }]
         },
-        options: chartOptions
+        options: baseOpts
       });
 
-      // Timeline Chart
-      const timelineCtx = document.getElementById('timelineChart').getContext('2d');
-      timelineChart = new Chart(timelineCtx, {
+      timelineChart = new Chart(document.getElementById('timelineChart').getContext('2d'), {
         type: 'line',
         data: {
           labels: [],
           datasets: [{
-            label: 'Pengunjung Aktif',
             data: [],
-            borderColor: 'rgba(139, 92, 246, 1)',
-            backgroundColor: 'rgba(139, 92, 246, 0.1)',
-            borderWidth: 3,
-            fill: true,
-            tension: 0.4,
+            borderColor: 'rgba(139,92,246,.9)',
+            backgroundColor: 'rgba(139,92,246,.08)',
+            borderWidth: 2.5,
+            fill: true, tension: 0.4,
             pointRadius: 4,
-            pointBackgroundColor: 'rgba(139, 92, 246, 1)'
+            pointBackgroundColor: '#8b5cf6',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2
           }]
         },
-        options: {
-          ...chartOptions,
-          animation: {
-            duration: 750
-          }
-        }
+        options: { ...baseOpts, animation: { duration: 600 } }
       });
     }
 
-    // Update Statistics
     async function updateStats() {
       try {
-        const response = await fetch('/api/stats');
-        const data = await response.json();
+        const data = await fetch('/api/stats').then(r=>r.json());
 
-        // Update stat cards
-        updateElement('currentCount', data.current_count || 0);
-        updateElement('maxCount', data.max_count || 0);
-        updateElement('dailyTotal', data.daily_total || 0);
-        updateElement('databaseFaces', data.database_faces || 0);
-        updateElement('systemFPS', Math.round(data.fps || 0));
+        set('currentCount', data.current_count||0);
+        set('maxCount', data.max_count||0);
+        set('dailyTotal', data.daily_total||0);
+        set('databaseFaces', data.database_faces||0);
+        set('systemFPS', Math.round(data.fps||0));
+        set('streamFPS', Math.round(data.fps||0));
+        set('processingFPS', Math.round(data.processing_fps||0));
 
-        // Update FPS monitors
-        updateElement('streamFPS', Math.round(data.fps || 0));
-        updateElement('processingFPS', Math.round(data.processing_fps || 0));
+        const tSpan = document.querySelector('#activeTrackers strong');
+        if(tSpan) tSpan.textContent = data.active_ids||0;
 
-        // Update active trackers
-        const trackersSpan = document.querySelector('#activeTrackers .text-purple-400');
-        if (trackersSpan) {
-          trackersSpan.textContent = data.active_ids || 0;
-        }
+        const pct = Math.min(100, ((data.current_count||0)/50)*100);
+        const pb = document.getElementById('currentProgress');
+        if(pb) pb.style.width = pct+'%';
 
-        // Update progress bar
-        const maxCapacity = 50; // Assumed max capacity
-        const percentage = Math.min(100, (data.current_count / maxCapacity) * 100);
-        const progressBar = document.getElementById('currentProgress');
-        if (progressBar) {
-          progressBar.style.width = percentage + '%';
-        }
+        const live = document.getElementById('liveIndicator');
+        live.classList.toggle('hidden', !data.detection_enabled);
 
-        // Update live indicator
-        const liveIndicator = document.getElementById('liveIndicator');
-        if (data.detection_enabled) {
-          liveIndicator.classList.remove('hidden');
-        } else {
-          liveIndicator.classList.add('hidden');
-        }
+        document.getElementById('detectionToggle').classList.toggle('active', !!data.detection_enabled);
+        set('sessionStatus', data.detection_enabled ? 'Aktif' : 'Tidak Aktif');
+        document.getElementById('sessionStatus').style.color = data.detection_enabled ? '#10b981' : '#f43f5e';
+        set('lastUpdate', new Date().toLocaleTimeString('id-ID'));
 
-        // Update detection toggle
-        const toggle = document.getElementById('detectionToggle');
-        if (data.detection_enabled) {
-          toggle.classList.add('active');
-        } else {
-          toggle.classList.remove('active');
-        }
-
-        // Update session status
-        updateElement('sessionStatus', data.detection_enabled ? 'Aktif' : 'Tidak Aktif');
-
-        // Update last update time
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString('id-ID');
-        updateElement('lastUpdate', timeStr);
-
-        // Add to history for timeline
-        addToHistory(data.current_count || 0);
-
-      } catch (error) {
-        console.error('Error updating stats:', error);
-        showNotification('Gagal memperbarui statistik', 'error');
+        addToHistory(data.current_count||0);
+      } catch(e) {
+        console.error(e);
+        showToast('Gagal memperbarui statistik', 'error');
       }
     }
 
-    // Update Charts
     async function updateCharts() {
       try {
-        const response = await fetch('/api/history');
-        const data = await response.json();
-
-        // Update hourly chart
-        if (data.hourly_stats && hourlyChart) {
-          const hourlyData = new Array(24).fill(0);
-          Object.entries(data.hourly_stats).forEach(([hour, count]) => {
-            hourlyData[parseInt(hour)] = count;
-          });
-          hourlyChart.data.datasets[0].data = hourlyData;
+        const data = await fetch('/api/history').then(r=>r.json());
+        if(data.hourly_stats && hourlyChart) {
+          const arr = new Array(24).fill(0);
+          Object.entries(data.hourly_stats).forEach(([h,c]) => arr[+h]=c);
+          hourlyChart.data.datasets[0].data = arr;
           hourlyChart.update();
         }
-
-      } catch (error) {
-        console.error('Error updating charts:', error);
-      }
+      } catch(e){}
     }
 
-    // Add to history
     function addToHistory(count) {
-      const now = new Date();
-      const timeLabel = now.toLocaleTimeString('id-ID', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      });
-
-      statsHistory.push({
-        time: timeLabel,
-        count: count
-      });
-
-      // Keep only last N points
-      if (statsHistory.length > maxHistoryPoints) {
-        statsHistory.shift();
-      }
-
-      // Update timeline chart
-      if (timelineChart) {
-        timelineChart.data.labels = statsHistory.map(s => s.time);
-        timelineChart.data.datasets[0].data = statsHistory.map(s => s.count);
+      const label = new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+      statsHistory.push({label, count});
+      if(statsHistory.length > maxHist) statsHistory.shift();
+      if(timelineChart) {
+        timelineChart.data.labels = statsHistory.map(s=>s.label);
+        timelineChart.data.datasets[0].data = statsHistory.map(s=>s.count);
         timelineChart.update();
       }
     }
 
-    // Toggle Detection
     async function toggleDetection() {
       try {
         detectionEnabled = !detectionEnabled;
-        
-        const response = await fetch('/api/detection/toggle', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            enabled: detectionEnabled
-          })
-        });
-
-        const data = await response.json();
-        
-        if (data.success) {
-          showNotification(
-            detectionEnabled ? 'Deteksi diaktifkan' : 'Deteksi dinonaktifkan',
-            'success'
-          );
-          
-          // Update toggle UI
-          const toggle = document.getElementById('detectionToggle');
-          if (detectionEnabled) {
-            toggle.classList.add('active');
-          } else {
-            toggle.classList.remove('active');
-          }
+        const data = await fetch('/api/detection/toggle',{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({enabled:detectionEnabled})
+        }).then(r=>r.json());
+        if(data.success) {
+          document.getElementById('detectionToggle').classList.toggle('active', detectionEnabled);
+          showToast(detectionEnabled ? 'Deteksi diaktifkan' : 'Deteksi dinonaktifkan', 'success');
         }
-
-      } catch (error) {
-        console.error('Error toggling detection:', error);
-        showNotification('Gagal mengubah status deteksi', 'error');
-      }
+      } catch(e){ showToast('Gagal mengubah status', 'error'); }
     }
 
-    // Refresh Stats
     async function refreshStats() {
-      showNotification('Memperbarui data...', 'info');
+      showToast('Memperbarui data...', 'info');
       await updateStats();
       await updateCharts();
-      showNotification('Data berhasil diperbarui', 'success');
+      showToast('Data berhasil diperbarui', 'success');
     }
 
-    // Confirm Reset
     function confirmReset() {
-      if (confirm('Yakin ingin mereset semua statistik hari ini? Data akan dihapus permanen.')) {
-        resetStats();
-      }
+      if(confirm('Yakin ingin mereset semua statistik hari ini? Data akan dihapus permanen.')) resetStats();
     }
 
-    // Reset Statistics
     async function resetStats() {
       try {
-        const response = await fetch('/api/reset', {
-          method: 'POST'
-        });
-
-        const data = await response.json();
-        
-        if (data.success) {
-          showNotification('Statistik berhasil direset', 'success');
+        const data = await fetch('/api/reset',{method:'POST'}).then(r=>r.json());
+        if(data.success) {
           statsHistory = [];
-          await updateStats();
-          await updateCharts();
-        } else {
-          showNotification('Gagal mereset statistik', 'error');
-        }
-
-      } catch (error) {
-        console.error('Error resetting stats:', error);
-        showNotification('Terjadi kesalahan', 'error');
-      }
+          await updateStats(); await updateCharts();
+          showToast('Statistik berhasil direset', 'success');
+        } else showToast('Gagal mereset statistik', 'error');
+      } catch(e){ showToast('Terjadi kesalahan', 'error'); }
     }
 
-    // Session Timer
-    function startSessionTimer() {
+    function startTimer() {
       setInterval(() => {
-        const elapsed = Date.now() - sessionStartTime;
-        const hours = Math.floor(elapsed / 3600000);
-        const minutes = Math.floor((elapsed % 3600000) / 60000);
-        const seconds = Math.floor((elapsed % 60000) / 1000);
-        
-        const timeStr = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-        updateElement('sessionDuration', timeStr);
+        const e = Date.now() - sessionStartTime;
+        const h = Math.floor(e/3600000), m = Math.floor((e%3600000)/60000), s = Math.floor((e%60000)/1000);
+        set('sessionDuration', `${pad(h)}:${pad(m)}:${pad(s)}`);
       }, 1000);
     }
 
-    // Handle Stream Error
     function handleStreamError() {
-      const streamStatus = document.getElementById('streamStatus');
-      if (streamStatus) {
-        streamStatus.innerHTML = '<span class="text-red-400">⚠️ Stream terputus, mencoba reconnect...</span>';
-      }
-      
-      // Try to reload stream after delay
+      const el = document.getElementById('streamStatus');
+      if(el) el.innerHTML = '<span style="color:#f43f5e;">⚠️ Stream terputus, mencoba reconnect...</span>';
       setTimeout(() => {
-        const videoStream = document.getElementById('videoStream');
-        if (videoStream) {
-          videoStream.src = '/video_feed?' + new Date().getTime();
-        }
+        const v = document.getElementById('videoStream');
+        if(v) v.src = '/video_feed?'+Date.now();
       }, 3000);
     }
 
-    // Utility Functions
-    function updateElement(id, value) {
-      const element = document.getElementById(id);
-      if (element) {
-        element.textContent = value;
-      }
+    function set(id, val) { const el=document.getElementById(id); if(el) el.textContent=val; }
+    function pad(n) { return String(n).padStart(2,'0'); }
+
+    function showToast(msg, type='info') {
+      const colors = { success:'#10b981', error:'#ef4444', info:'#3b82f6' };
+      const t = document.createElement('div');
+      t.className = 'toast';
+      t.style.borderLeftColor = colors[type];
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => { t.style.transition='.3s'; t.style.opacity='0'; t.style.transform='translateX(360px)'; setTimeout(()=>t.remove(),300); }, 3000);
     }
 
-    function pad(num) {
-      return num.toString().padStart(2, '0');
-    }
-
-    function showNotification(message, type = 'info') {
-      const colors = {
-        success: 'border-green-500',
-        error: 'border-red-500',
-        info: 'border-blue-500'
-      };
-
-      const toast = document.createElement('div');
-      toast.className = `toast ${colors[type]}`;
-      toast.innerHTML = `
-        <div class="flex items-center gap-3">
-          <div class="text-white">${message}</div>
-        </div>
-      `;
-
-      document.body.appendChild(toast);
-
-      setTimeout(() => {
-        toast.style.animation = 'slideIn 0.3s ease reverse';
-        setTimeout(() => toast.remove(), 300);
-      }, 3000);
-    }
-
-    // Prevent context menu on video
     document.addEventListener('DOMContentLoaded', () => {
-      const videoStream = document.getElementById('videoStream');
-      if (videoStream) {
-        videoStream.addEventListener('contextmenu', (e) => e.preventDefault());
-      }
+      const v = document.getElementById('videoStream');
+      if(v) v.addEventListener('contextmenu', e=>e.preventDefault());
     });
   </script>
 </body>

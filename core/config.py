@@ -20,14 +20,14 @@ class Config:
     # FPS — JANGAN naikkan DETECTION_FPS
     # Detection berat di CPU, tracking yang mengisi sisanya
     # ========================================
-    TARGET_FPS    = 20   # render target
-    STREAM_FPS    = 20   # frame capture rate
-    DETECTION_FPS = 3    # ← HARUS 3, sinkron dengan face_counter
+    TARGET_FPS    = 20
+    STREAM_FPS    = 25   # naikkan sedikit agar capture tidak lagging
+    DETECTION_FPS = 5    # naikkan dari 3 → 5 (CPU masih aman, detection lebih responsif)
 
-    FRAME_SKIP = 1
+    FRAME_SKIP = 0       # jangan skip frame
     ENABLE_ADAPTIVE_FPS = False
-    MIN_FPS = 20
-    MAX_FPS = 20
+    MIN_FPS = 15
+    MAX_FPS = 25
 
     # ========================================
     # RESOLUSI
@@ -61,8 +61,8 @@ class Config:
     # THREADING
     # Queue kecil = latency rendah (jangan besarkan)
     # ========================================
-    FRAME_QUEUE_SIZE  = 3
-    RESULT_QUEUE_SIZE = 3
+    FRAME_QUEUE_SIZE  = 1   # ← turunkan dari 3 ke 1 (hanya frame terbaru)
+    RESULT_QUEUE_SIZE = 1   # ← sama
 
     # ========================================
     # THRESHOLD DETEKSI
