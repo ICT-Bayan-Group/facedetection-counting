@@ -18,7 +18,6 @@
       min-height: 100vh;
     }
 
-    /* ── SUBTLE PAGE PATTERN ── */
     body::before {
       content: '';
       position: fixed;
@@ -33,26 +32,17 @@
 
     /* ── NAVBAR ── */
     .navbar {
-      position: sticky;
-      top: 0;
-      z-index: 50;
+      position: sticky; top: 0; z-index: 50;
       margin: 12px 16px 0;
       background: #ffffff;
       border-radius: 20px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.07), 0 6px 20px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
     }
-
     .navbar-inner {
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: 0 20px;
-      height: 68px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
+      max-width: 1280px; margin: 0 auto;
+      padding: 0 20px; height: 68px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
     }
-
     .navbar-brand { display: flex; align-items: center; gap: 12px; flex-shrink: 0; min-width: 0; }
     .navbar-logo { height: 40px; width: auto; object-fit: contain; max-width: 140px; flex-shrink: 0; }
     .navbar-title {
@@ -62,7 +52,6 @@
       white-space: nowrap;
     }
     .navbar-subtitle { font-size: 0.72rem; color: #94a3b8; white-space: nowrap; margin-top: 1px; }
-
     .navbar-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
     .live-badge {
@@ -73,10 +62,7 @@
       box-shadow: 0 2px 10px rgba(239,68,68,0.35);
       animation: livePulse 2s ease-in-out infinite;
     }
-    @keyframes livePulse {
-      0%,100% { box-shadow: 0 2px 10px rgba(239,68,68,0.35); }
-      50%      { box-shadow: 0 2px 18px rgba(239,68,68,0.6); }
-    }
+    @keyframes livePulse { 0%,100%{box-shadow:0 2px 10px rgba(239,68,68,0.35)} 50%{box-shadow:0 2px 18px rgba(239,68,68,0.6)} }
     .live-dot { width: 7px; height: 7px; background: #fff; border-radius: 50%; animation: blink 1.5s infinite; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
 
@@ -87,14 +73,11 @@
       border-radius: 50px; font-size: 0.78rem; color: #15803d; font-weight: 500;
     }
     .status-dot {
-      width: 8px; height: 8px; background: #22c55e; border-radius: 50%; flex-shrink: 0;
+      width: 8px; height: 8px; background: #22c55e; border-radius: 50%;
       box-shadow: 0 0 0 3px rgba(34,197,94,.2);
       animation: sDot 2s ease-in-out infinite;
     }
-    @keyframes sDot {
-      0%,100%{ box-shadow:0 0 0 3px rgba(34,197,94,.2); }
-      50%    { box-shadow:0 0 0 5px rgba(34,197,94,.1); }
-    }
+    @keyframes sDot { 0%,100%{box-shadow:0 0 0 3px rgba(34,197,94,.2)} 50%{box-shadow:0 0 0 5px rgba(34,197,94,.1)} }
 
     .navbar-btn {
       display: inline-flex; align-items: center; gap: 7px;
@@ -103,10 +86,9 @@
       color: #fff; border-radius: 12px; font-weight: 600; font-size: 0.82rem;
       text-decoration: none; border: none; cursor: pointer;
       box-shadow: 0 2px 8px rgba(59,130,246,0.3);
-      transition: all .25s ease;
-      white-space: nowrap;
+      transition: all .25s ease; white-space: nowrap;
     }
-    .navbar-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(59,130,246,.45); background: linear-gradient(135deg,#2563eb,#1d4ed8); }
+    .navbar-btn:hover { transform:translateY(-1px); box-shadow:0 4px 16px rgba(59,130,246,.45); background:linear-gradient(135deg,#2563eb,#1d4ed8); }
 
     @media(max-width:480px){
       .navbar-subtitle,.status-label,.btn-label,.live-label{ display:none; }
@@ -116,61 +98,41 @@
       .live-badge{ padding:5px 8px; }
       .navbar-logo{ height:32px; max-width:100px; }
     }
-    @media(max-width:360px){
-      .navbar-inner{ padding:0 12px; height:60px; }
-      .navbar{ margin:8px 8px 0; border-radius:16px; }
-    }
 
     /* ── CARDS ── */
     .card {
-      background: #ffffff;
-      border-radius: 20px;
+      background: #ffffff; border-radius: 20px;
       border: 1px solid #e2e8f0;
       box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06);
       transition: all .3s cubic-bezier(.4,0,.2,1);
     }
-    .card:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08), 0 12px 32px rgba(0,0,0,0.1);
-      border-color: #bfdbfe;
-    }
+    .card:hover { transform:translateY(-3px); box-shadow:0 4px 12px rgba(0,0,0,0.08), 0 12px 32px rgba(0,0,0,0.1); border-color:#bfdbfe; }
 
     /* ── STAT CARDS ── */
     .stat-card {
-      background: #ffffff;
-      border-radius: 20px;
-      padding: 1.4rem;
+      background: #ffffff; border-radius: 20px; padding: 1.4rem;
       border: 1px solid #e2e8f0;
       box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06);
       transition: all .4s cubic-bezier(.4,0,.2,1);
-      position: relative;
-      overflow: hidden;
+      position: relative; overflow: hidden;
     }
     .stat-card::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      border-radius: 20px;
-      opacity: 0;
+      content: ''; position: absolute; inset: 0; border-radius: 20px; opacity: 0;
       transition: opacity .35s ease;
       background: linear-gradient(135deg, rgba(59,130,246,0.04), rgba(139,92,246,0.04));
     }
-    .stat-card:hover { transform: translateY(-5px) scale(1.015); box-shadow: 0 8px 24px rgba(0,0,0,0.12); border-color: #bfdbfe; }
+    .stat-card:hover { transform:translateY(-5px) scale(1.015); box-shadow:0 8px 24px rgba(0,0,0,0.12); border-color:#bfdbfe; }
     .stat-card:hover::after { opacity: 1; }
 
     .stat-number {
-      font-family: 'JetBrains Mono', monospace;
-      font-weight: 700;
-      font-size: 2.4rem;
+      font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 2.4rem;
       background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
       -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
       line-height: 1.2;
     }
-
     .icon-wrap {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 48px; height: 48px; border-radius: 14px;
-      flex-shrink: 0;
+      width: 48px; height: 48px; border-radius: 14px; flex-shrink: 0;
     }
 
     /* ── PROGRESS BAR ── */
@@ -178,44 +140,64 @@
     .progress-fill {
       height: 100%;
       background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-      border-radius: 50px;
-      transition: width .5s ease;
+      border-radius: 50px; transition: width .5s ease;
       position: relative; overflow: hidden;
     }
     .progress-fill::after {
-      content: '';
-      position: absolute; inset: 0;
+      content: ''; position: absolute; inset: 0;
       background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent);
       animation: shimmer 2s infinite;
     }
     @keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
 
-    /* ── VIDEO ── */
-    .video-container {
-      position: relative; border-radius: 16px; overflow: hidden;
+    /* ── VIDEO PAIR ── */
+    .video-pair { display: grid; grid-template-columns: 1fr; gap: 14px; }
+
+    .video-tile {
+      position: relative; border-radius: 14px; overflow: hidden;
       background: #0f172a;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.18);
     }
-    .video-container::before {
-      content: '';
-      position: absolute; top:-2px;left:-2px;right:-2px;bottom:-2px;
+    /* Gradient border hanya di tile aktif */
+    .video-tile.cam0::before {
+      content: ''; position: absolute; top:-2px;left:-2px;right:-2px;bottom:-2px;
       background: linear-gradient(45deg,#3b82f6,#8b5cf6,#ec4899,#3b82f6);
-      background-size: 300% 300%;
-      border-radius: 18px; z-index: -1;
+      background-size: 300% 300%; border-radius: 16px; z-index: -1;
+      animation: borderAnim 4s ease infinite;
+    }
+    .video-tile.cam1::before {
+      content: ''; position: absolute; top:-2px;left:-2px;right:-2px;bottom:-2px;
+      background: linear-gradient(45deg,#10b981,#14b8a6,#06b6d4,#10b981);
+      background-size: 300% 300%; border-radius: 16px; z-index: -1;
       animation: borderAnim 4s ease infinite;
     }
     @keyframes borderAnim { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
-    .video-stream { width: 100%; height: auto; display: block; border-radius: 14px; }
+
+    .video-stream { width: 100%; height: auto; display: block; border-radius: 12px; aspect-ratio: 16/9; object-fit: cover; }
+
+    /* overlay badge di pojok tile */
+    .cam-badge {
+      position: absolute; top: 8px; left: 8px;
+      padding: 3px 10px; border-radius: 8px;
+      font-size: .72rem; font-weight: 700; letter-spacing: .04em;
+      color: #fff; backdrop-filter: blur(6px);
+    }
+    .cam-badge.cam0 { background: rgba(59,130,246,.75); }
+    .cam-badge.cam1 { background: rgba(16,185,129,.75); }
+
+    /* per-camera FPS pill */
+    .cam-fps {
+      position: absolute; bottom: 8px; right: 8px;
+      font-family: 'JetBrains Mono', monospace; font-size: .72rem; font-weight: 600;
+      padding: 3px 10px; border-radius: 8px;
+      background: rgba(0,0,0,.55); color: #fff; backdrop-filter: blur(4px);
+    }
 
     /* ── FPS MONITOR ── */
     .fps-monitor {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.8rem;
-      padding: 6px 14px;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 10px;
-      color: #475569;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;
+      padding: 6px 14px; background: #f8fafc; border: 1px solid #e2e8f0;
+      border-radius: 10px; color: #475569;
     }
 
     /* ── TOGGLE ── */
@@ -238,30 +220,15 @@
       display: inline-flex; align-items: center; justify-content: center; gap: 8px;
       padding: .7rem 1.4rem; border-radius: 12px;
       font-weight: 600; font-size: .9rem;
-      border: none; cursor: pointer;
-      transition: all .25s ease;
-      width: 100%;
+      border: none; cursor: pointer; transition: all .25s ease; width: 100%;
     }
-    .btn-blue {
-      background: linear-gradient(135deg, #3b82f6, #2563eb);
-      color: white;
-      box-shadow: 0 2px 8px rgba(59,130,246,.25);
-    }
+    .btn-blue { background:linear-gradient(135deg,#3b82f6,#2563eb); color:white; box-shadow:0 2px 8px rgba(59,130,246,.25); }
     .btn-blue:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(59,130,246,.4); background:linear-gradient(135deg,#2563eb,#1d4ed8); }
-    .btn-red {
-      background: linear-gradient(135deg, #ef4444, #dc2626);
-      color: white;
-      box-shadow: 0 2px 8px rgba(239,68,68,.2);
-    }
+    .btn-red { background:linear-gradient(135deg,#ef4444,#dc2626); color:white; box-shadow:0 2px 8px rgba(239,68,68,.2); }
     .btn-red:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(239,68,68,.35); }
 
     /* ── INFO BOX ── */
-    .info-box {
-      background: linear-gradient(135deg, #eff6ff, #f5f3ff);
-      border: 1px solid #ddd6fe;
-      border-radius: 14px;
-      padding: 1rem;
-    }
+    .info-box { background:linear-gradient(135deg,#eff6ff,#f5f3ff); border:1px solid #ddd6fe; border-radius:14px; padding:1rem; }
 
     /* ── DIVIDER ── */
     .divider { border: none; border-top: 1px solid #e2e8f0; margin: 1.25rem 0; }
@@ -270,28 +237,30 @@
     .chart-container { position: relative; height: 280px; }
 
     /* ── SECTION LABEL ── */
-    .section-label {
-      font-size: .7rem; font-weight: 600; text-transform: uppercase;
-      letter-spacing: .08em; color: #94a3b8; margin-bottom: .5rem;
+    .section-label { font-size:.7rem; font-weight:600; text-transform:uppercase; letter-spacing:.08em; color:#94a3b8; margin-bottom:.5rem; }
+
+    /* ── CAMERA STATUS ROW ── */
+    .cam-status-row {
+      display: flex; gap: 10px; flex-wrap: wrap;
     }
+    .cam-status-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 12px; border-radius: 8px;
+      font-size: .78rem; font-weight: 600; border: 1px solid;
+    }
+    .cam-status-pill.cam0 { background:#eff6ff; border-color:#bfdbfe; color:#2563eb; }
+    .cam-status-pill.cam1 { background:#f0fdf4; border-color:#bbf7d0; color:#15803d; }
 
     /* ── TOAST ── */
     .toast {
       position: fixed; top: 20px; right: 20px;
-      background: #ffffff;
-      border-radius: 14px;
-      padding: 1rem 1.5rem;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-      border-left: 4px solid #3b82f6;
-      z-index: 9999;
-      animation: toastIn .3s ease;
-      color: #1e293b;
-      font-weight: 500;
-      font-size: .9rem;
+      background: #ffffff; border-radius: 14px; padding: 1rem 1.5rem;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15); border-left: 4px solid #3b82f6;
+      z-index: 9999; animation: toastIn .3s ease;
+      color: #1e293b; font-weight: 500; font-size: .9rem;
     }
     @keyframes toastIn { from{transform:translateX(360px);opacity:0} to{transform:translateX(0);opacity:1} }
 
-    /* ── MOBILE ── */
     @media(max-width:768px){
       .stat-number{ font-size:2rem; }
       .chart-container{ height:220px; }
@@ -299,7 +268,6 @@
       .card{ border-radius:16px; }
     }
 
-    /* ── SCROLLBAR ── */
     ::-webkit-scrollbar { width:6px; }
     ::-webkit-scrollbar-track { background:#f1f5f9; }
     ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:4px; }
@@ -313,11 +281,10 @@
     <div class="navbar-inner">
       <div class="navbar-brand">
         <img src="https://res.cloudinary.com/djs5pi7ev/image/upload/v1774509112/BAYAN_R_-_SAMPING_fgnkyb.png"
-             alt="Logo" class="navbar-logo"
-             onerror="this.style.display='none'" />
+             alt="Logo" class="navbar-logo" onerror="this.style.display='none'" />
         <div>
           <div class="navbar-title">Face Counter Dashboard</div>
-          <div class="navbar-subtitle">Sistem Monitoring Pengunjung Real-time</div>
+          <div class="navbar-subtitle">Sistem Monitoring Pengunjung — 2 Kamera</div>
         </div>
       </div>
 
@@ -347,7 +314,6 @@
     <!-- STAT CARDS -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
 
-      <!-- Pengunjung Saat Ini -->
       <div class="stat-card">
         <div class="icon-wrap mb-3" style="background:#eff6ff;">
           <svg width="22" height="22" fill="#3b82f6" viewBox="0 0 20 20">
@@ -356,12 +322,16 @@
         </div>
         <p class="section-label">Pengunjung Saat Ini</p>
         <p class="stat-number" id="currentCount">0</p>
-        <div class="progress-bar mt-3">
+        <!-- per-camera breakdown -->
+        <div class="cam-status-row mt-2">
+          <span class="cam-status-pill cam0">CAM1: <span id="cam0Count">0</span></span>
+          <span class="cam-status-pill cam1">CAM2: <span id="cam1Count">0</span></span>
+        </div>
+        <div class="progress-bar mt-2">
           <div class="progress-fill" id="currentProgress" style="width:0%"></div>
         </div>
       </div>
 
-      <!-- Maksimal -->
       <div class="stat-card">
         <div class="icon-wrap mb-3" style="background:#faf5ff;">
           <svg width="22" height="22" fill="#8b5cf6" viewBox="0 0 20 20">
@@ -370,10 +340,9 @@
         </div>
         <p class="section-label">Maksimal Hari Ini</p>
         <p class="stat-number" id="maxCount">0</p>
-        <p style="font-size:.75rem;color:#94a3b8;margin-top:6px;">Rekor tertinggi</p>
+        <p style="font-size:.75rem;color:#94a3b8;margin-top:6px;">Rekor tertinggi (gabungan)</p>
       </div>
 
-      <!-- Total Hari Ini -->
       <div class="stat-card">
         <div class="icon-wrap mb-3" style="background:#f0fdf4;">
           <svg width="22" height="22" fill="#10b981" viewBox="0 0 20 20">
@@ -385,7 +354,6 @@
         <p style="font-size:.75rem;color:#94a3b8;margin-top:6px;">Wajah unik terdeteksi</p>
       </div>
 
-      <!-- Database -->
       <div class="stat-card">
         <div class="icon-wrap mb-3" style="background:#fff7ed;">
           <svg width="22" height="22" fill="#f97316" viewBox="0 0 20 20">
@@ -397,7 +365,6 @@
         <p style="font-size:.75rem;color:#94a3b8;margin-top:6px;">Total tersimpan</p>
       </div>
 
-      <!-- FPS -->
       <div class="stat-card">
         <div class="icon-wrap mb-3" style="background:#fff1f2;">
           <svg width="22" height="22" fill="#f43f5e" viewBox="0 0 20 20">
@@ -406,40 +373,57 @@
         </div>
         <p class="section-label">Performa Sistem</p>
         <p class="stat-number" id="systemFPS">0</p>
-        <p style="font-size:.75rem;color:#94a3b8;margin-top:6px;">FPS real-time</p>
+        <p style="font-size:.75rem;color:#94a3b8;margin-top:6px;">FPS rata-rata (2 kamera)</p>
       </div>
 
     </div>
 
-    <!-- VIDEO + CONTROL -->
+    <!-- VIDEO PAIR + CONTROL -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-      <!-- Video -->
+      <!-- Dual Video -->
       <div class="card p-5 lg:col-span-2">
         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
           <div>
-            <p class="section-label">Live Stream</p>
+            <p class="section-label">Live Stream — 2 Kamera</p>
             <h2 style="font-size:1.2rem;font-weight:700;color:#1e293b;">Video Stream Live</h2>
           </div>
           <div class="fps-monitor">
-            <span style="color:#94a3b8;">Stream:</span>
-            <span style="color:#3b82f6;font-weight:600;" id="streamFPS">0</span>
-            <span style="color:#94a3b8;">FPS</span>
+            <span style="color:#94a3b8;">CAM1:</span>
+            <span style="color:#3b82f6;font-weight:600;" id="streamFPS0">0</span>
+            <span style="color:#94a3b8;">fps</span>
             <span style="margin:0 8px;color:#cbd5e1;">|</span>
-            <span style="color:#94a3b8;">Deteksi:</span>
-            <span style="color:#8b5cf6;font-weight:600;" id="processingFPS">0</span>
-            <span style="color:#94a3b8;">FPS</span>
+            <span style="color:#94a3b8;">CAM2:</span>
+            <span style="color:#10b981;font-weight:600;" id="streamFPS1">0</span>
+            <span style="color:#94a3b8;">fps</span>
           </div>
         </div>
 
-        <div class="video-container">
-          <img id="videoStream" src="/video_feed" alt="Video Stream" class="video-stream" onerror="handleStreamError()" />
+        <!-- 2 video side-by-side -->
+        <div class="video-pair">
+
+          <!-- Kamera 1 -->
+          <div class="video-tile cam0">
+            <img id="videoStream0" src="/video_feed/0" alt="Kamera 1"
+                 class="video-stream" onerror="handleStreamError(0)" />
+            <span class="cam-badge cam0">● Kamera 1 — 10.2.22.30</span>
+            <span class="cam-fps" id="fpsBadge0">0 fps</span>
+          </div>
+
+          <!-- Kamera 2 -->
+          <div class="video-tile cam1">
+            <img id="videoStream1" src="/video_feed/1" alt="Kamera 2"
+                 class="video-stream" onerror="handleStreamError(1)" />
+            <span class="cam-badge cam1">● Kamera 2 — 10.2.22.15</span>
+            <span class="cam-fps" id="fpsBadge1">0 fps</span>
+          </div>
+
         </div>
 
         <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1" style="font-size:.82rem;color:#64748b;">
           <span style="display:flex;align-items:center;gap:5px;">
             <svg width="14" height="14" fill="#10b981" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-            <span id="streamStatus">Stream aktif dan terhubung</span>
+            <span id="streamStatus">2 stream aktif</span>
           </span>
           <span>Resolusi: <strong style="color:#3b82f6;">960×540</strong></span>
           <span id="activeTrackers">Tracking: <strong style="color:#8b5cf6;">0</strong></span>
@@ -457,7 +441,7 @@
         <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:#f8fafc;border-radius:14px;border:1px solid #e2e8f0;">
           <div>
             <p style="font-weight:600;font-size:.9rem;color:#374151;">Deteksi Wajah</p>
-            <p style="font-size:.75rem;color:#94a3b8;margin-top:2px;">Aktifkan / nonaktifkan</p>
+            <p style="font-size:.75rem;color:#94a3b8;margin-top:2px;">Aktifkan / nonaktifkan (semua kamera)</p>
           </div>
           <div class="toggle-switch active" id="detectionToggle" onclick="toggleDetection()">
             <div class="toggle-slider"></div>
@@ -480,6 +464,15 @@
               <span style="color:#64748b;">Terakhir Update</span>
               <span id="lastUpdate" style="font-family:'JetBrains Mono',monospace;color:#8b5cf6;">-</span>
             </div>
+          </div>
+        </div>
+
+        <!-- Camera status pills -->
+        <div>
+          <p class="section-label">Status Kamera</p>
+          <div class="cam-status-row">
+            <span class="cam-status-pill cam0" id="cam0StatusPill">● Kamera 1 — OK</span>
+            <span class="cam-status-pill cam1" id="cam1StatusPill">● Kamera 2 — OK</span>
           </div>
         </div>
 
@@ -510,8 +503,8 @@
               <span id="detectionMethod" style="font-weight:600;color:#3b82f6;">OpenVINO</span>
             </div>
             <div style="display:flex;justify-content:space-between;">
-              <span style="color:#64748b;">Embedding</span>
-              <span id="embeddingStatus" style="font-weight:600;color:#10b981;">Aktif</span>
+              <span style="color:#64748b;">Jumlah Kamera</span>
+              <span style="font-weight:600;color:#10b981;">2 Unit</span>
             </div>
             <div style="display:flex;justify-content:space-between;">
               <span style="color:#64748b;">Target FPS</span>
@@ -519,25 +512,22 @@
             </div>
             <div style="display:flex;justify-content:space-between;">
               <span style="color:#64748b;">Resolusi Deteksi</span>
-              <span style="font-family:'JetBrains Mono',monospace;font-weight:600;color:#f97316;">940×460</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-weight:600;color:#f97316;">640×640</span>
             </div>
           </div>
         </div>
-
       </div>
     </div>
 
     <!-- CHARTS -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
       <div class="card p-5">
         <p class="section-label">Analitik</p>
-        <h2 style="font-size:1.1rem;font-weight:700;color:#1e293b;margin-bottom:1rem;">Statistik Per Jam</h2>
+        <h2 style="font-size:1.1rem;font-weight:700;color:#1e293b;margin-bottom:1rem;">Statistik Per Jam (Gabungan)</h2>
         <div class="chart-container">
           <canvas id="hourlyChart"></canvas>
         </div>
       </div>
-
       <div class="card p-5">
         <p class="section-label">Real-time</p>
         <h2 style="font-size:1.1rem;font-weight:700;color:#1e293b;margin-bottom:1rem;">Timeline Deteksi</h2>
@@ -545,7 +535,6 @@
           <canvas id="timelineChart"></canvas>
         </div>
       </div>
-
     </div>
 
   </main>
@@ -556,6 +545,10 @@
     let hourlyChart = null, timelineChart = null;
     let statsHistory = [];
     const maxHist = 30;
+
+    // cache FPS per kamera dari camera_stats
+    let camFPS = [0, 0];
+    let camCount = [0, 0];
 
     document.addEventListener('DOMContentLoaded', () => {
       initCharts();
@@ -569,8 +562,7 @@
       const gridColor = 'rgba(226,232,240,0.8)';
       const tickColor = '#94a3b8';
       const baseOpts = {
-        responsive: true,
-        maintainAspectRatio: false,
+        responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
           y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor } },
@@ -586,8 +578,7 @@
             data: new Array(24).fill(0),
             backgroundColor: 'rgba(59,130,246,0.15)',
             borderColor: 'rgba(59,130,246,.8)',
-            borderWidth: 2,
-            borderRadius: 8
+            borderWidth: 2, borderRadius: 8
           }]
         },
         options: baseOpts
@@ -601,12 +592,9 @@
             data: [],
             borderColor: 'rgba(139,92,246,.9)',
             backgroundColor: 'rgba(139,92,246,.08)',
-            borderWidth: 2.5,
-            fill: true, tension: 0.4,
-            pointRadius: 4,
-            pointBackgroundColor: '#8b5cf6',
-            pointBorderColor: '#fff',
-            pointBorderWidth: 2
+            borderWidth: 2.5, fill: true, tension: 0.4,
+            pointRadius: 4, pointBackgroundColor: '#8b5cf6',
+            pointBorderColor: '#fff', pointBorderWidth: 2
           }]
         },
         options: { ...baseOpts, animation: { duration: 600 } }
@@ -615,23 +603,42 @@
 
     async function updateStats() {
       try {
-        const data = await fetch('/api/stats').then(r=>r.json());
+        const data = await fetch('/api/stats').then(r => r.json());
 
-        set('currentCount', data.current_count||0);
-        set('maxCount', data.max_count||0);
-        set('dailyTotal', data.daily_total||0);
-        set('databaseFaces', data.database_faces||0);
-        set('systemFPS', Math.round(data.fps||0));
-        set('streamFPS', Math.round(data.fps||0));
-        set('processingFPS', Math.round(data.processing_fps||0));
+        set('currentCount', data.current_count || 0);
+        set('maxCount',     data.max_count     || 0);
+        set('dailyTotal',   data.daily_total   || 0);
+        set('databaseFaces', data.database_faces || 0);
+        set('systemFPS',    Math.round(data.fps || 0));
 
-        const tSpan = document.querySelector('#activeTrackers strong');
-        if(tSpan) tSpan.textContent = data.active_ids||0;
+        // Per-camera stats
+        const cs = data.camera_stats || [];
+        if (cs[0]) {
+          camFPS[0]   = cs[0].fps || 0;
+          camCount[0] = cs[0].current_count || 0;
+        }
+        if (cs[1]) {
+          camFPS[1]   = cs[1].fps || 0;
+          camCount[1] = cs[1].current_count || 0;
+        }
 
-        const pct = Math.min(100, ((data.current_count||0)/50)*100);
-        const pb = document.getElementById('currentProgress');
-        if(pb) pb.style.width = pct+'%';
+        set('cam0Count', camCount[0]);
+        set('cam1Count', camCount[1]);
+        set('streamFPS0', Math.round(camFPS[0]));
+        set('streamFPS1', Math.round(camFPS[1]));
 
+        // FPS badge di atas tile
+        const b0 = document.getElementById('fpsBadge0');
+        const b1 = document.getElementById('fpsBadge1');
+        if (b0) b0.textContent = Math.round(camFPS[0]) + ' fps';
+        if (b1) b1.textContent = Math.round(camFPS[1]) + ' fps';
+
+        // Progress bar
+        const pct = Math.min(100, ((data.current_count || 0) / 100) * 100);
+        const pb  = document.getElementById('currentProgress');
+        if (pb) pb.style.width = pct + '%';
+
+        // Live badge
         const live = document.getElementById('liveIndicator');
         live.classList.toggle('hidden', !data.detection_enabled);
 
@@ -640,32 +647,51 @@
         document.getElementById('sessionStatus').style.color = data.detection_enabled ? '#10b981' : '#f43f5e';
         set('lastUpdate', new Date().toLocaleTimeString('id-ID'));
 
-        addToHistory(data.current_count||0);
+        const tSpan = document.querySelector('#activeTrackers strong');
+        if (tSpan) tSpan.textContent = data.active_ids || 0;
+
+        addToHistory(data.current_count || 0);
       } catch(e) {
         console.error(e);
         showToast('Gagal memperbarui statistik', 'error');
       }
     }
 
+    // Juga fetch health untuk update status kamera
+    async function updateCameraStatus() {
+      try {
+        const h = await fetch('/api/health').then(r => r.json());
+        const cams = h.cameras || [];
+        cams.forEach(cam => {
+          const pill = document.getElementById(`cam${cam.cam_id}StatusPill`);
+          if (pill) {
+            pill.textContent = `● ${cam.label} — ${cam.running ? 'OK' : 'OFFLINE'}`;
+          }
+        });
+      } catch(e) {}
+    }
+
+    setInterval(updateCameraStatus, 5000);
+
     async function updateCharts() {
       try {
-        const data = await fetch('/api/history').then(r=>r.json());
-        if(data.hourly_stats && hourlyChart) {
+        const data = await fetch('/api/history').then(r => r.json());
+        if (data.hourly_stats && hourlyChart) {
           const arr = new Array(24).fill(0);
-          Object.entries(data.hourly_stats).forEach(([h,c]) => arr[+h]=c);
+          Object.entries(data.hourly_stats).forEach(([h, c]) => arr[+h] = c);
           hourlyChart.data.datasets[0].data = arr;
           hourlyChart.update();
         }
-      } catch(e){}
+      } catch(e) {}
     }
 
     function addToHistory(count) {
-      const label = new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
-      statsHistory.push({label, count});
-      if(statsHistory.length > maxHist) statsHistory.shift();
-      if(timelineChart) {
-        timelineChart.data.labels = statsHistory.map(s=>s.label);
-        timelineChart.data.datasets[0].data = statsHistory.map(s=>s.count);
+      const label = new Date().toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
+      statsHistory.push({ label, count });
+      if (statsHistory.length > maxHist) statsHistory.shift();
+      if (timelineChart) {
+        timelineChart.data.labels              = statsHistory.map(s => s.label);
+        timelineChart.data.datasets[0].data    = statsHistory.map(s => s.count);
         timelineChart.update();
       }
     }
@@ -673,15 +699,16 @@
     async function toggleDetection() {
       try {
         detectionEnabled = !detectionEnabled;
-        const data = await fetch('/api/detection/toggle',{
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({enabled:detectionEnabled})
-        }).then(r=>r.json());
-        if(data.success) {
+        const data = await fetch('/api/detection/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: detectionEnabled })
+        }).then(r => r.json());
+        if (data.success) {
           document.getElementById('detectionToggle').classList.toggle('active', detectionEnabled);
-          showToast(detectionEnabled ? 'Deteksi diaktifkan' : 'Deteksi dinonaktifkan', 'success');
+          showToast(detectionEnabled ? 'Deteksi diaktifkan (semua kamera)' : 'Deteksi dinonaktifkan', 'success');
         }
-      } catch(e){ showToast('Gagal mengubah status', 'error'); }
+      } catch(e) { showToast('Gagal mengubah status', 'error'); }
     }
 
     async function refreshStats() {
@@ -692,53 +719,58 @@
     }
 
     function confirmReset() {
-      if(confirm('Yakin ingin mereset semua statistik hari ini? Data akan dihapus permanen.')) resetStats();
+      if (confirm('Yakin ingin mereset semua statistik hari ini? (Kedua kamera akan direset)')) resetStats();
     }
 
     async function resetStats() {
       try {
-        const data = await fetch('/api/reset',{method:'POST'}).then(r=>r.json());
-        if(data.success) {
+        const data = await fetch('/api/reset', { method: 'POST' }).then(r => r.json());
+        if (data.success) {
           statsHistory = [];
           await updateStats(); await updateCharts();
-          showToast('Statistik berhasil direset', 'success');
+          showToast('Statistik berhasil direset (semua kamera)', 'success');
         } else showToast('Gagal mereset statistik', 'error');
-      } catch(e){ showToast('Terjadi kesalahan', 'error'); }
+      } catch(e) { showToast('Terjadi kesalahan', 'error'); }
     }
 
     function startTimer() {
       setInterval(() => {
         const e = Date.now() - sessionStartTime;
-        const h = Math.floor(e/3600000), m = Math.floor((e%3600000)/60000), s = Math.floor((e%60000)/1000);
+        const h = Math.floor(e / 3600000);
+        const m = Math.floor((e % 3600000) / 60000);
+        const s = Math.floor((e % 60000) / 1000);
         set('sessionDuration', `${pad(h)}:${pad(m)}:${pad(s)}`);
       }, 1000);
     }
 
-    function handleStreamError() {
+    function handleStreamError(camId) {
       const el = document.getElementById('streamStatus');
-      if(el) el.innerHTML = '<span style="color:#f43f5e;">⚠️ Stream terputus, mencoba reconnect...</span>';
+      if (el) el.innerHTML = `<span style="color:#f43f5e;">⚠️ Kamera ${camId + 1} terputus, reconnecting...</span>`;
       setTimeout(() => {
-        const v = document.getElementById('videoStream');
-        if(v) v.src = '/video_feed?'+Date.now();
+        const v = document.getElementById(`videoStream${camId}`);
+        if (v) v.src = `/video_feed/${camId}?t=${Date.now()}`;
       }, 3000);
     }
 
-    function set(id, val) { const el=document.getElementById(id); if(el) el.textContent=val; }
-    function pad(n) { return String(n).padStart(2,'0'); }
+    function set(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+    function pad(n) { return String(n).padStart(2, '0'); }
 
-    function showToast(msg, type='info') {
-      const colors = { success:'#10b981', error:'#ef4444', info:'#3b82f6' };
+    function showToast(msg, type = 'info') {
+      const colors = { success: '#10b981', error: '#ef4444', info: '#3b82f6' };
       const t = document.createElement('div');
       t.className = 'toast';
       t.style.borderLeftColor = colors[type];
       t.textContent = msg;
       document.body.appendChild(t);
-      setTimeout(() => { t.style.transition='.3s'; t.style.opacity='0'; t.style.transform='translateX(360px)'; setTimeout(()=>t.remove(),300); }, 3000);
+      setTimeout(() => {
+        t.style.transition = '.3s'; t.style.opacity = '0';
+        t.style.transform = 'translateX(360px)';
+        setTimeout(() => t.remove(), 300);
+      }, 3000);
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      const v = document.getElementById('videoStream');
-      if(v) v.addEventListener('contextmenu', e=>e.preventDefault());
+      document.querySelectorAll('.video-stream').forEach(v => v.addEventListener('contextmenu', e => e.preventDefault()));
     });
   </script>
 </body>

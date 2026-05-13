@@ -1,6 +1,7 @@
 """
 Surveillance-Grade Face Detection Configuration
 Sinkron dengan optimized_face_counter.py
+Versi: 2 kamera (10.2.22.30 + 10.2.22.15)
 """
 import os
 
@@ -12,40 +13,34 @@ class Config:
     USE_OPENVINO     = True
     OPENVINO_DEVICE  = 'CPU'
 
-    # Priority: adas-0001 paling bagus untuk CCTV jarak jauh
     FACE_DETECTION_MODEL_XML = 'models/face-detection-adas-0001.xml'
     FACE_DETECTION_MODEL_BIN = 'models/face-detection-adas-0001.bin'
 
     # ========================================
-    # FPS — JANGAN naikkan DETECTION_FPS
-    # Detection berat di CPU, tracking yang mengisi sisanya
+    # FPS
     # ========================================
     TARGET_FPS    = 20
-    STREAM_FPS    = 25   # naikkan sedikit agar capture tidak lagging
-    DETECTION_FPS = 5    # naikkan dari 3 → 5 (CPU masih aman, detection lebih responsif)
+    STREAM_FPS    = 25
+    DETECTION_FPS = 5
 
-    FRAME_SKIP = 0       # jangan skip frame
+    FRAME_SKIP = 0
     ENABLE_ADAPTIVE_FPS = False
     MIN_FPS = 15
     MAX_FPS = 25
 
     # ========================================
     # RESOLUSI
-    # FRAME = resolusi display ke browser
-    # DETECTION = resolusi input ke OpenVINO
     # ========================================
     FRAME_WIDTH  = 960
     FRAME_HEIGHT = 540
 
-    # ← 640x640 WAJIB untuk deteksi wajah kecil di 8 meter
-    # Jangan turunkan ke 320 atau 416
     DETECTION_WIDTH  = 640
     DETECTION_HEIGHT = 640
 
     JPEG_QUALITY = 82
 
     # ========================================
-    # CCTV
+    # KAMERA 1 — IP utama lama
     # ========================================
     CCTV_IP   = "10.2.22.30"
     CCTV_USER = "admin"
@@ -58,44 +53,81 @@ class Config:
     ]
 
     # ========================================
-    # THREADING
-    # Queue kecil = latency rendah (jangan besarkan)
+    # KAMERA 2 — IP tambahan baru
     # ========================================
-    FRAME_QUEUE_SIZE  = 1   # ← turunkan dari 3 ke 1 (hanya frame terbaru)
-    RESULT_QUEUE_SIZE = 1   # ← sama
+    CCTV_IP_2   = "10.2.22.20"
+    CCTV_USER_2 = "admin"
+    CCTV_PASS_2 = "ictb4y4n"
+
+    CCTV_URLS_2 = [
+        f"rtsp://{CCTV_USER_2}:{CCTV_PASS_2}@{CCTV_IP_2}/streaming/channels/101",
+        f"rtsp://{CCTV_USER_2}:{CCTV_PASS_2}@{CCTV_IP_2}/streaming/channels/102",
+        f"rtsp://{CCTV_USER_2}:{CCTV_PASS_2}@{CCTV_IP_2}:554/stream1",
+    ]
+
+    # ========================================
+    # MULTI-CAMERA CONFIG
+    # Urutan: [kamera_0, kamera_1]
+    # ========================================
+    CAMERAS = [
+        {
+            "id":       0,
+            "label":    "Kamera 1",
+            "ip":       CCTV_IP,
+            "user":     CCTV_USER,
+            "password": CCTV_PASS,
+            "urls": [
+                f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}/streaming/channels/101",
+                f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}/streaming/channels/102",
+                f"rtsp://{CCTV_USER}:{CCTV_PASS}@{CCTV_IP}:554/stream1",
+            ],
+        },
+        {
+            "id":       1,
+            "label":    "Kamera 2",
+            "ip":       CCTV_IP_2,
+            "user":     CCTV_USER_2,
+            "password": CCTV_PASS_2,
+            "urls": [
+                f"rtsp://{CCTV_USER_2}:{CCTV_PASS_2}@{CCTV_IP_2}/streaming/channels/101",
+                f"rtsp://{CCTV_USER_2}:{CCTV_PASS_2}@{CCTV_IP_2}/streaming/channels/102",
+                f"rtsp://{CCTV_USER_2}:{CCTV_PASS_2}@{CCTV_IP_2}:554/stream1",
+            ],
+        },
+    ]
+
+    # ========================================
+    # THREADING
+    # ========================================
+    FRAME_QUEUE_SIZE  = 1
+    RESULT_QUEUE_SIZE = 1
 
     # ========================================
     # THRESHOLD DETEKSI
-    # Nilai di bawah ini DIABAIKAN oleh face_counter
-    # (face_counter punya konstannya sendiri)
-    # Tapi tetap disimpan untuk referensi/legacy
     # ========================================
-    CONFIDENCE_THRESHOLD = 0.55   # sinkron: CONFIDENCE_THRESH di face_counter
-    MIN_FACE_SIZE        = 15     # sinkron: min 15px di OpenVINO inference
+    CONFIDENCE_THRESHOLD = 0.55
+    MIN_FACE_SIZE        = 15
     MAX_FACE_SIZE        = 500
 
     # ========================================
     # TRACKING
     # ========================================
-    TRACK_HISTORY_LENGTH   = 40    # sinkron: deque(maxlen=40) di face_counter
-    MAX_TRACKING_DISTANCE  = 180   # sinkron: MAX_POSITION_DIST
+    TRACK_HISTORY_LENGTH   = 40
+    MAX_TRACKING_DISTANCE  = 180
     FACE_TIMEOUT           = 2.0
-    ID_TIMEOUT             = 6.0   # sinkron: ID_TIMEOUT di face_counter
+    ID_TIMEOUT             = 6.0
 
     DETECTION_COOLDOWN = 2.0
 
     # ========================================
     # DISPLAY
-    # Trail hijau sudah dimatikan di face_counter._draw_trail()
-    # Config ini untuk referensi saja
     # ========================================
-    SHOW_TRACKING_BOXES = True    # corner bracket box tetap tampil semua status
-    SHOW_NEW_ONLY       = False   # semua status tampil (DETECTED, VERIFYING, dst)
+    SHOW_TRACKING_BOXES = True
+    SHOW_NEW_ONLY       = False
     SHOW_FACE_ID        = True
     SHOW_CONFIDENCE     = True
-    SHOW_TRAIL          = False   # ← trail hijau MATI
+    SHOW_TRAIL          = False
 
-    # Warna dihandle STATUS_COLOR di face_counter, ini untuk referensi
     NEW_FACE_COLOR    = (0, 255, 0)
     TRACKING_COLOR    = (150, 150, 150)
     BOX_THICKNESS     = 2
@@ -106,7 +138,7 @@ class Config:
     # MEMORY
     # ========================================
     MAX_EMBEDDING_HISTORY = 5
-    MAX_QUALITY_HISTORY   = 15   # sinkron: deque(maxlen=15) di TrackerEntry
+    MAX_QUALITY_HISTORY   = 15
 
     ENABLE_AUTO_CLEANUP = True
     CLEANUP_INTERVAL    = 300
@@ -173,7 +205,7 @@ class Config:
     @staticmethod
     def print_config():
         print("\n" + "="*60)
-        print("⚙️  SURVEILLANCE FACE DETECTION CONFIG")
+        print("⚙️  SURVEILLANCE FACE DETECTION CONFIG — 2 KAMERA")
         print("="*60)
         print(f"   Device          : {Config.OPENVINO_DEVICE}")
         print(f"   Stream FPS      : {Config.STREAM_FPS}")
@@ -182,4 +214,7 @@ class Config:
         print(f"   Detection Size  : {Config.DETECTION_WIDTH}×{Config.DETECTION_HEIGHT}  ← 640 wajib!")
         print(f"   Confidence Min  : {Config.CONFIDENCE_THRESHOLD}")
         print(f"   Trail           : {'ON' if Config.SHOW_TRAIL else 'OFF'}")
+        print(f"   Jumlah Kamera   : {len(Config.CAMERAS)}")
+        for cam in Config.CAMERAS:
+            print(f"     [{cam['id']}] {cam['label']} → {cam['ip']}")
         print("="*60 + "\n")
