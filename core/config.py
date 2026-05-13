@@ -147,7 +147,7 @@ class Config:
     # FLASK
     # ========================================
     HOST     = '0.0.0.0'
-    PORT     = 5000
+    PORT     = 8000
     DEBUG    = False
     THREADED = True
 
