@@ -66,7 +66,7 @@ python app.py
 
 Kemudian buka dashboard di browser:
 
-http://localhost:5000
+http://localhost:8000
 
 ## Endpoint API
 
