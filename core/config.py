@@ -55,7 +55,7 @@ class Config:
     # ========================================
     # KAMERA 2 — IP tambahan baru
     # ========================================
-    CCTV_IP_2   = "10.2.22.6"
+    CCTV_IP_2   = "10.2.22.20"
     CCTV_USER_2 = "admin"
     CCTV_PASS_2 = "ictb4y4n"
 
