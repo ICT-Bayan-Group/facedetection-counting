@@ -3,465 +3,793 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Data Pengunjung - Face Counter</title>
+  <title>Data Pengunjung — Face Counter</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
-    .stat-card {
-      background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-      transition: all 0.3s ease;
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      min-height: 100vh;
     }
-    .stat-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+
+    /* ── NAVBAR ── */
+    .navbar {
+      position: sticky; top: 0; z-index: 50;
+      margin: 12px 16px 0;
+      background: #ffffff;
+      border-radius: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.07), 0 6px 20px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
     }
-    .table-row:hover {
-      background-color: #f1f5f9;
+    .navbar-inner {
+      max-width: 1280px; margin: 0 auto;
+      padding: 0 20px; height: 68px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
     }
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.25rem 0.75rem;
-      border-radius: 9999px;
-      font-size: 0.875rem;
-      font-weight: 600;
+    .navbar-brand { display: flex; align-items: center; gap: 12px; }
+    .navbar-logo  { height: 40px; width: auto; object-fit: contain; max-width: 140px; }
+    .navbar-title {
+      font-size: 1.05rem; font-weight: 700;
+      background: linear-gradient(135deg, #ea580c 0%, #ca8a04 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
     }
-    .status-selesai {
-      background-color: #dcfce7;
-      color: #166534;
-    }
-    .status-gagal {
-      background-color: #fee2e2;
-      color: #991b1b;
-    }
-    .status-running {
-      background-color: #dbeafe;
-      color: #1e40af;
-      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.7; }
-    }
+    .navbar-subtitle { font-size: .72rem; color: #94a3b8; margin-top: 1px; }
+    .navbar-right { display: flex; align-items: center; gap: 10px; }
+
     .live-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.5rem 1rem;
-      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-      color: white;
-      border-radius: 9999px;
-      font-weight: 600;
-      font-size: 0.875rem;
-      box-shadow: 0 4px 6px rgba(239, 68, 68, 0.3);
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px;
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      border-radius: 50px; font-weight: 600; font-size: .75rem; color: #fff;
+      box-shadow: 0 2px 10px rgba(239,68,68,.35);
+      animation: livePulse 2s ease-in-out infinite;
     }
-    .live-dot {
-      width: 8px;
-      height: 8px;
-      background: white;
-      border-radius: 50%;
-      animation: blink 1.5s infinite;
+    @keyframes livePulse { 0%,100%{box-shadow:0 2px 10px rgba(239,68,68,.35)} 50%{box-shadow:0 2px 18px rgba(239,68,68,.6)} }
+    .live-dot { width: 7px; height: 7px; background: #fff; border-radius: 50%; animation: blink 1.5s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    .navbar-btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 8px 16px;
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: #fff; border-radius: 12px; font-weight: 600; font-size: .82rem;
+      text-decoration: none; border: none; cursor: pointer;
+      box-shadow: 0 2px 8px rgba(59,130,246,.3);
+      transition: all .25s ease;
     }
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
+    .navbar-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(59,130,246,.45); }
+    .navbar-btn.secondary {
+      background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;
+      box-shadow: none;
     }
+    .navbar-btn.secondary:hover { background: #e2e8f0; }
+    .navbar-btn.green {
+      background: linear-gradient(135deg, #10b981, #059669);
+      box-shadow: 0 2px 8px rgba(16,185,129,.3);
+    }
+    .navbar-btn.green:hover { box-shadow: 0 4px 16px rgba(16,185,129,.45); }
+
+    /* ── CARD ── */
+    .card {
+      background: #fff; border-radius: 20px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.06);
+      transition: all .3s cubic-bezier(.4,0,.2,1);
+    }
+    .card:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,0,0,.1); border-color: #bfdbfe; }
+
+    .stat-card {
+      background: #fff; border-radius: 20px; padding: 1.4rem;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.06);
+      transition: all .35s cubic-bezier(.4,0,.2,1);
+    }
+    .stat-card:hover { transform: translateY(-4px); box-shadow: 0 8px 28px rgba(0,0,0,.1); border-color: #bfdbfe; }
+
+    .stat-number {
+      font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 2.4rem;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .icon-wrap {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 48px; height: 48px; border-radius: 14px; flex-shrink: 0;
+    }
+
+    /* ── TABS ── */
+    .tab-bar { display: flex; gap: 4px; background: #f1f5f9; border-radius: 14px; padding: 4px; }
+    .tab-btn {
+      flex: 1; padding: 8px 16px; border-radius: 10px;
+      font-weight: 600; font-size: .85rem; border: none; cursor: pointer;
+      transition: all .2s ease; color: #64748b; background: transparent;
+    }
+    .tab-btn.active { background: #fff; color: #2563eb; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+
+    /* ── TABLE ── */
+    .tbl-wrap { overflow-x: auto; border-radius: 16px; }
+    table     { width: 100%; border-collapse: collapse; }
+    thead th  { background: #f8fafc; padding: 12px 16px; text-align: left; font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #64748b; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
+    tbody td  { padding: 12px 16px; font-size: .88rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    tbody tr:hover td { background: #f8fafc; }
+    tbody tr:last-child td { border-bottom: none; }
+
+    /* ── BADGE ── */
+    .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 8px; font-size: .75rem; font-weight: 600; }
+    .badge-green  { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+    .badge-blue   { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+    .badge-orange { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+    .badge-gray   { background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; }
+    .badge-pulse  { animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.7} }
+
+    /* ── SECTION LABEL ── */
+    .section-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; margin-bottom: .5rem; }
+
+    /* ── DATE CARD ── */
+    .date-card {
+      border: 2px solid #e2e8f0; border-radius: 14px; padding: 14px 18px;
+      cursor: pointer; transition: all .2s ease; background: #fff;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .date-card:hover { border-color: #93c5fd; background: #eff6ff; }
+    .date-card.active { border-color: #3b82f6; background: #eff6ff; }
+    .date-card .day-num { font-family: 'JetBrains Mono', monospace; font-size: 1.8rem; font-weight: 800; color: #3b82f6; line-height: 1; }
+    .date-card .month   { font-size: .72rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; }
+    .date-card .count   { font-family: 'JetBrains Mono', monospace; font-size: 1.2rem; font-weight: 700; color: #1e293b; }
+    .date-card .count-label { font-size: .7rem; color: #94a3b8; }
+
+    /* ── MODAL ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45);
+      backdrop-filter: blur(4px); z-index: 1000;
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal-box {
+      background: #fff; border-radius: 24px; width: 100%; max-width: 860px;
+      max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 24px 64px rgba(0,0,0,.2);
+      animation: modalIn .25s ease;
+    }
+    @keyframes modalIn { from{transform:scale(.95);opacity:0} to{transform:scale(1);opacity:1} }
+    .modal-header {
+      padding: 20px 24px 16px; border-bottom: 1px solid #f1f5f9;
+      display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: #fff; border-radius: 24px 24px 0 0; z-index: 1;
+    }
+    .modal-body { padding: 20px 24px; }
+
+    /* ── CHART ── */
+    .chart-wrap { position: relative; height: 240px; }
+
+    /* ── INPUT ── */
+    input[type="date"], select {
+      padding: 8px 14px; border: 1px solid #e2e8f0; border-radius: 12px;
+      font-family: 'Outfit', sans-serif; font-size: .88rem; color: #374151;
+      background: #f8fafc; outline: none; transition: border .2s;
+    }
+    input[type="date"]:focus, select:focus { border-color: #93c5fd; background: #fff; }
+
+    /* ── TOAST ── */
+    .toast {
+      position: fixed; top: 20px; right: 20px;
+      background: #fff; border-radius: 14px; padding: 1rem 1.5rem;
+      box-shadow: 0 8px 24px rgba(0,0,0,.15); border-left: 4px solid #3b82f6;
+      z-index: 9999; animation: toastIn .3s ease;
+      color: #1e293b; font-weight: 500; font-size: .9rem;
+    }
+    @keyframes toastIn { from{transform:translateX(360px);opacity:0} to{transform:translateX(0);opacity:1} }
+
+    /* empty state */
+    .empty-state { text-align: center; padding: 48px 24px; color: #94a3b8; }
+    .empty-state svg { margin: 0 auto 16px; display: block; }
+    .empty-state p  { font-size: 1.1rem; font-weight: 600; color: #64748b; }
+    .empty-state span { font-size: .88rem; }
+
+    @media(max-width:640px){
+      .stat-number{ font-size: 1.8rem; }
+      .modal-box  { max-height: 95vh; }
+    }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
   </style>
 </head>
-<body class="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 min-h-screen">
-  
-  <!-- Header -->
-  <header class="bg-white/80 backdrop-blur-lg border-b border-gray-200/50 sticky top-0 z-50">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <img src="https://res.cloudinary.com/dwyi4d3rq/image/upload/v1765779007/BAYAN_R_-_BAWAH_xs3qyv.png" alt="Logo" class="h-12 w-12" />
-          <div>
-            <h1 class="text-2xl font-bold text-gray-900">Data Pengunjung</h1>
-            <p class="text-sm text-gray-500">Rekapitulasi Hasil Deteksi Face Counter</p>
-          </div>
-        </div>
+<body>
 
-        <div class="flex items-center gap-3">
-          <!-- LIVE INDICATOR -->
-          <div id="liveIndicator" class="live-badge hidden">
-            <span class="live-dot"></span>
-            <span>LIVE</span>
-          </div>
-
-          <a href="/" class="flex items-center gap-2 px-4 py-2 bg-white rounded-full border border-gray-200 hover:bg-gray-50 transition-all">
-            <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
-            </svg>
-            <span class="text-sm font-medium text-gray-700">Dashboard</span>
-          </a>
-          
-          <button onclick="exportData()" class="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold rounded-full shadow-lg transition-all">
-            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
-            </svg>
-            Export CSV
-          </button>
-        </div>
+<!-- ── NAVBAR ── -->
+<nav class="navbar">
+  <div class="navbar-inner">
+    <div class="navbar-brand">
+      <img src="https://res.cloudinary.com/djs5pi7ev/image/upload/v1774509112/BAYAN_R_-_SAMPING_fgnkyb.png"
+           alt="Logo" class="navbar-logo" onerror="this.style.display='none'" />
+      <div>
+        <div class="navbar-title">Data Pengunjung</div>
+        <div class="navbar-subtitle">Rekapitulasi Harian Face Counter — 2 Kamera</div>
       </div>
     </div>
-  </header>
-
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    
-    <!-- Statistics Summary -->
-    <div class="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
-      <div class="stat-card rounded-3xl p-6 border shadow-lg">
-        <div class="flex items-center justify-between mb-4">
-          <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center">
-            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
-              <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
-            </svg>
-          </div>
-        </div>
-        <h3 class="text-sm font-medium text-gray-600 mb-1">Total Sesi</h3>
-        <p class="text-3xl font-bold text-gray-900" id="totalSessions">0</p>
+    <div class="navbar-right">
+      <div id="liveIndicator" class="live-badge hidden">
+        <span class="live-dot"></span>LIVE
       </div>
+      <button onclick="triggerManualSnapshot()" class="navbar-btn green">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+        Simpan Snapshot
+      </button>
+      <button onclick="exportTodayCSV()" class="navbar-btn">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+        Export CSV
+      </button>
+      <a href="/" class="navbar-btn secondary">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>
+        Dashboard
+      </a>
+    </div>
+  </div>
+</nav>
 
-      <div class="stat-card rounded-3xl p-6 border shadow-lg">
-        <div class="flex items-center justify-between mb-4">
-          <div class="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center">
-            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/>
-            </svg>
-          </div>
-        </div>
-        <h3 class="text-sm font-medium text-gray-600 mb-1">Total Pengunjung</h3>
-        <p class="text-3xl font-bold text-gray-900" id="totalVisitors">0</p>
-      </div>
+<!-- ── MAIN ── -->
+<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-      <div class="stat-card rounded-3xl p-6 border shadow-lg">
-        <div class="flex items-center justify-between mb-4">
-          <div class="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-500 rounded-2xl flex items-center justify-center">
-            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/>
-            </svg>
-          </div>
-        </div>
-        <h3 class="text-sm font-medium text-gray-600 mb-1">Rata-rata per Sesi</h3>
-        <p class="text-3xl font-bold text-gray-900" id="avgVisitors">0</p>
-      </div>
+  <!-- ── STAT CARDS ── -->
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
 
-      <div class="stat-card rounded-3xl p-6 border shadow-lg">
-        <div class="flex items-center justify-between mb-4">
-          <div class="w-12 h-12 bg-gradient-to-br from-orange-500 to-amber-500 rounded-2xl flex items-center justify-center">
-            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
-            </svg>
-          </div>
-        </div>
-        <h3 class="text-sm font-medium text-gray-600 mb-1">Durasi Rata-rata</h3>
-        <p class="text-3xl font-bold text-gray-900" id="avgDuration">0</p>
-        <p class="text-xs text-gray-500">menit</p>
+    <div class="stat-card">
+      <div class="icon-wrap mb-2" style="background:#eff6ff;">
+        <svg width="20" height="20" fill="#3b82f6" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
       </div>
-
-      <!-- NEW: Database Faces -->
-      <div class="stat-card rounded-3xl p-6 border shadow-lg">
-        <div class="flex items-center justify-between mb-4">
-          <div class="w-12 h-12 bg-gradient-to-br from-pink-500 to-rose-500 rounded-2xl flex items-center justify-center">
-            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
-            </svg>
-          </div>
-        </div>
-        <h3 class="text-sm font-medium text-gray-600 mb-1">Unique Faces DB</h3>
-        <p class="text-3xl font-bold text-gray-900" id="databaseFaces">0</p>
-      </div>
+      <p class="section-label">Hari Tercatat</p>
+      <p class="stat-number" id="totalDays">0</p>
     </div>
 
-    <!-- Filter & Actions -->
-    <div class="stat-card rounded-3xl p-6 border shadow-lg mb-8">
-      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
-        <div class="flex items-center gap-4 w-full md:w-auto">
-          <div class="flex items-center gap-2">
-            <svg class="w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clip-rule="evenodd"/>
-            </svg>
-            <label class="text-sm font-medium text-gray-700">Filter Tanggal:</label>
-          </div>
-          <input type="date" id="dateFilter" class="px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" onchange="filterByDate()">
-          <button onclick="clearFilter()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-all">
-            Reset Filter
-          </button>
-        </div>
+    <div class="stat-card">
+      <div class="icon-wrap mb-2" style="background:#f0fdf4;">
+        <svg width="20" height="20" fill="#10b981" viewBox="0 0 20 20"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"/></svg>
+      </div>
+      <p class="section-label">Total Pengunjung</p>
+      <p class="stat-number" id="grandTotal">0</p>
+    </div>
 
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-500" id="lastUpdate">Update: -</span>
-          <button onclick="refreshData()" class="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-xl transition-all">
-            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
-            </svg>
-            Refresh
-          </button>
+    <div class="stat-card">
+      <div class="icon-wrap mb-2" style="background:#faf5ff;">
+        <svg width="20" height="20" fill="#8b5cf6" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd"/></svg>
+      </div>
+      <p class="section-label">Rata-rata/Hari</p>
+      <p class="stat-number" id="avgPerDay">0</p>
+    </div>
+
+    <div class="stat-card">
+      <div class="icon-wrap mb-2" style="background:#fff7ed;">
+        <svg width="20" height="20" fill="#f97316" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/></svg>
+      </div>
+      <p class="section-label">Max Detect</p>
+      <p class="stat-number" id="allTimeMax">0</p>
+    </div>
+
+    <div class="stat-card">
+      <div class="icon-wrap mb-2" style="background:#fff1f2;">
+        <svg width="20" height="20" fill="#f43f5e" viewBox="0 0 20 20"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07z"/></svg>
+      </div>
+      <p class="section-label">Data Tersimpan DB</p>
+      <p class="stat-number" id="dbFaces">0</p>
+    </div>
+
+    <div class="stat-card">
+      <div class="icon-wrap mb-2" style="background:#f0fdf4;">
+        <svg width="20" height="20" fill="#10b981" viewBox="0 0 20 20"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/></svg>
+      </div>
+      <p class="section-label">Sesi Total</p>
+      <p class="stat-number" id="totalSessions">0</p>
+    </div>
+
+  </div>
+
+  <!-- ── CHART + FILTER ── -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- Grafik 30 hari -->
+    <div class="card p-5 lg:col-span-2">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <p class="section-label">Trend</p>
+          <h2 style="font-size:1.1rem;font-weight:700;color:#1e293b;">Pengunjung 30 Hari Terakhir</h2>
         </div>
+        <select id="chartRange" onchange="reloadChart()" style="font-size:.8rem;">
+          <option value="30">30 hari</option>
+          <option value="14">14 hari</option>
+          <option value="7">7 hari</option>
+        </select>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="trendChart"></canvas>
       </div>
     </div>
 
-    <!-- Sessions Table -->
-    <div class="stat-card rounded-3xl overflow-hidden border shadow-lg">
-      <div class="bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-4">
-        <h2 class="text-lg font-semibold text-white">Riwayat Sesi Deteksi</h2>
+    <!-- Filter + Live info -->
+    <div class="card p-5 flex flex-col gap-4">
+      <div>
+        <p class="section-label">Filter</p>
+        <h2 style="font-size:1.1rem;font-weight:700;color:#1e293b;">Cari Data</h2>
       </div>
-      
-      <div class="overflow-x-auto">
-        <table class="w-full">
-          <thead class="bg-gray-50 border-b-2 border-gray-200">
+
+      <div class="flex flex-col gap-3">
+        <div>
+          <label style="font-size:.8rem;font-weight:600;color:#64748b;display:block;margin-bottom:4px;">Dari Tanggal</label>
+          <input type="date" id="startDate" style="width:100%;" onchange="applyFilter()">
+        </div>
+        <div>
+          <label style="font-size:.8rem;font-weight:600;color:#64748b;display:block;margin-bottom:4px;">Sampai Tanggal</label>
+          <input type="date" id="endDate" style="width:100%;" onchange="applyFilter()">
+        </div>
+        <button onclick="clearFilter()" style="width:100%;padding:9px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:12px;font-weight:600;font-size:.85rem;color:#475569;cursor:pointer;transition:background .2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">
+          Reset Filter
+        </button>
+      </div>
+
+      <hr style="border:none;border-top:1px solid #f1f5f9;">
+
+      <!-- Sesi running sekarang -->
+      <div>
+        <p class="section-label">Hari Ini (Live)</p>
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:.85rem;">
+          <div style="display:flex;justify-content:space-between;">
+            <span style="color:#64748b;">Pengunjung</span>
+            <span id="todayVisitors" style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#3b82f6;">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="color:#64748b;">Maks Bersamaan</span>
+            <span id="todayMax" style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#8b5cf6;">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="color:#64748b;">Status Deteksi</span>
+            <span id="detectionStatus" class="badge badge-green">Aktif</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="color:#64748b;">Terakhir Update</span>
+            <span id="lastUpdate" style="font-family:'JetBrains Mono',monospace;font-size:.78rem;color:#94a3b8;">-</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── DATA PER HARI (TABS) ── -->
+  <div class="card p-5">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+      <div>
+        <p class="section-label">Riwayat</p>
+        <h2 style="font-size:1.1rem;font-weight:700;color:#1e293b;">Data Per Hari</h2>
+      </div>
+      <div class="tab-bar" style="min-width:220px;">
+        <button class="tab-btn active" id="tabDaily" onclick="switchTab('daily')">Per Tanggal</button>
+        <button class="tab-btn" id="tabSessions" onclick="switchTab('sessions')">Sesi</button>
+      </div>
+    </div>
+
+    <!-- Tab: Per Tanggal -->
+    <div id="panelDaily">
+      <div id="dailyGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mb-4">
+        <!-- date cards injected here -->
+      </div>
+
+      <!-- Detail tabel (muncul ketika date-card diklik) -->
+      <div id="dateDetailSection" class="hidden mt-4">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <h3 id="dateDetailTitle" style="font-size:1rem;font-weight:700;color:#1e293b;">—</h3>
+          <div style="display:flex;gap:8px;">
+            <button id="btnExportDay" onclick="exportDay()" class="navbar-btn" style="font-size:.8rem;padding:6px 14px;">
+              <svg width="14" height="14" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+              Export CSV
+            </button>
+            <button onclick="closeDateDetail()" style="padding:6px 14px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;font-size:.8rem;font-weight:600;cursor:pointer;color:#475569;">✕ Tutup</button>
+          </div>
+        </div>
+
+        <!-- mini stats -->
+        <div id="dateDetailStats" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4"></div>
+
+        <!-- face table -->
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>No</th>
+                <th>Face ID</th>
+                <th>Pertama Terlihat</th>
+                <th>Terakhir Terlihat</th>
+                <th>Deteksi</th>
+                <th>Kamera</th>
+              </tr>
+            </thead>
+            <tbody id="faceTbody">
+              <tr><td colspan="6" class="empty-state">Pilih tanggal di atas</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="dailyEmpty" class="hidden empty-state">
+        <svg width="48" height="48" fill="none" stroke="#cbd5e1" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <p>Belum ada data snapshot</p>
+        <span>Klik "Simpan Snapshot" atau tunggu auto-reset tengah malam</span>
+      </div>
+    </div>
+
+    <!-- Tab: Sesi -->
+    <div id="panelSessions" class="hidden">
+      <div class="tbl-wrap">
+        <table>
+          <thead>
             <tr>
-              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">No</th>
-              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Tanggal</th>
-              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Waktu Mulai</th>
-              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Waktu Selesai</th>
-              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Total Pengunjung</th>
-              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Lokasi/Kamera</th>
-              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Durasi</th>
-              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
-              <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Aksi</th>
+              <th>#</th>
+              <th>Tanggal</th>
+              <th>Mulai</th>
+              <th>Selesai</th>
+              <th>Total</th>
+              <th>Lokasi</th>
+              <th>Durasi</th>
+              <th>Status</th>
+              <th>Aksi</th>
             </tr>
           </thead>
-          <tbody id="sessionsTableBody" class="bg-white divide-y divide-gray-200">
-            <tr>
-              <td colspan="9" class="px-6 py-12 text-center text-gray-500">
-                <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
-                </svg>
-                <p class="text-lg font-medium">Memuat data...</p>
-              </td>
-            </tr>
+          <tbody id="sessionsTbody">
+            <tr><td colspan="9" style="padding:32px;text-align:center;color:#94a3b8;">Memuat...</td></tr>
           </tbody>
         </table>
       </div>
     </div>
+  </div>
 
-  </main>
+</main>
 
-  <script>
-    let sessionsData = [];
-    let currentFilter = null;
-    let hasLiveSession = false;
+<!-- ── TOAST container ── -->
+<div id="toastArea"></div>
 
-    // Load data on page load
-    document.addEventListener('DOMContentLoaded', () => {
-      loadSessionsData();
-      setInterval(loadSessionsData, 10000); // Refresh every 10 seconds
+<script>
+  // ── STATE ──────────────────────────────────────────────────────────────────
+  let dailySummaries  = [];
+  let filteredSummaries = [];
+  let selectedDate    = null;
+  let currentTab      = 'daily';
+  let trendChart      = null;
+
+  const MONTHS = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
+
+  // ── INIT ───────────────────────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', () => {
+    initTrendChart();
+    loadAll();
+    setInterval(loadLiveStats, 5000);
+    setInterval(loadAll, 30000);
+
+    // SSE
+    const es = new EventSource('/api/events');
+    es.addEventListener('stats', e => {
+      const d = JSON.parse(e.data);
+      set('todayVisitors', d.current_count ?? 0);
+      set('dbFaces', d.database_faces ?? 0);
+      setTime('lastUpdate');
+    });
+    es.addEventListener('midnight_reset', e => {
+      const d = JSON.parse(e.data);
+      toast(`✅ Reset tengah malam — data ${d.date} tersimpan (${d.total_visitors} pengunjung)`, 'success');
+      setTimeout(loadAll, 2000);
+    });
+  });
+
+  // ── LOAD ALL ───────────────────────────────────────────────────────────────
+  async function loadAll() {
+    await Promise.all([loadDaily(), loadSessions(), loadLiveStats()]);
+  }
+
+  async function loadDaily() {
+    try {
+      const limit = document.getElementById('chartRange')?.value || 90;
+      const r = await fetch(`/api/daily?limit=${limit}`);
+      const d = await r.json();
+      if (!d.success) return;
+
+      dailySummaries = d.summaries || [];
+      filteredSummaries = dailySummaries;
+
+      // Overall stats
+      const ov = d.overall || {};
+      set('totalDays',     ov.total_days     || 0);
+      set('grandTotal',    ov.grand_total     || 0);
+      set('avgPerDay',     Math.round(ov.avg_per_day || 0));
+      set('allTimeMax',    ov.all_time_max    || 0);
+      set('totalSessions', dailySummaries.reduce((a,x)=>a+(x.session_count||0),0));
+
+      renderDateCards(filteredSummaries);
+      updateTrendChart(filteredSummaries);
+
+    } catch(e) { console.error('loadDaily:', e); }
+  }
+
+  async function loadSessions() {
+    try {
+      const r = await fetch('/api/sessions');
+      const d = await r.json();
+      if (!d.success) return;
+      renderSessionsTable(d.sessions || []);
+      set('totalSessions', (d.statistics || {}).total_sessions || 0);
+    } catch(e) { console.error('loadSessions:', e); }
+  }
+
+  async function loadLiveStats() {
+    try {
+      const r = await fetch('/api/stats');
+      const d = await r.json();
+      set('todayVisitors', d.daily_total   || 0);
+      set('todayMax',      d.max_count     || 0);
+      set('dbFaces',       d.database_faces|| 0);
+      setTime('lastUpdate');
+
+      const live = document.getElementById('liveIndicator');
+      live.classList.toggle('hidden', !d.detection_enabled);
+
+      const ds = document.getElementById('detectionStatus');
+      if (d.detection_enabled) {
+        ds.className = 'badge badge-green';
+        ds.textContent = 'Aktif';
+      } else {
+        ds.className = 'badge badge-gray';
+        ds.textContent = 'Nonaktif';
+      }
+    } catch(e) {}
+  }
+
+  // ── DATE CARDS ─────────────────────────────────────────────────────────────
+  function renderDateCards(summaries) {
+    const grid = document.getElementById('dailyGrid');
+    const empty = document.getElementById('dailyEmpty');
+
+    if (!summaries || summaries.length === 0) {
+      grid.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+
+    grid.innerHTML = summaries.map(s => {
+      const dt   = new Date(s.date + 'T00:00:00');
+      const day  = String(dt.getDate()).padStart(2,'0');
+      const month= MONTHS[dt.getMonth()];
+      const year = dt.getFullYear();
+      const active = s.date === selectedDate ? 'active' : '';
+      return `
+        <div class="date-card ${active}" onclick="loadDateDetail('${s.date}')">
+          <div>
+            <div class="day-num">${day}</div>
+            <div class="month">${month} ${year}</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="count">${s.total_visitors}</div>
+            <div class="count-label">pengunjung</div>
+            <div style="margin-top:4px;">
+              <span class="badge badge-blue" style="font-size:.68rem;">Maks: ${s.max_concurrent}</span>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // ── LOAD DATE DETAIL ────────────────────────────────────────────────────────
+  async function loadDateDetail(dateStr) {
+    selectedDate = dateStr;
+
+    // highlight active card
+    document.querySelectorAll('.date-card').forEach(el => {
+      el.classList.toggle('active', el.onclick?.toString().includes(dateStr));
     });
 
-   async function loadSessionsData() {
-      try {
-        const response = await fetch('/api/sessions');
-        const data = await response.json();
-        
-        if (!data.success) {
-          throw new Error(data.message || 'Failed to load sessions');
-        }
-        
-        sessionsData = data.sessions || [];
-        
-        // Check for live session
-        hasLiveSession = sessionsData.some(s => s.status === 'Running');
-        
-        // Update live indicator
-        const liveIndicator = document.getElementById('liveIndicator');
-        if (hasLiveSession) {
-          liveIndicator.classList.remove('hidden');
-        } else {
-          liveIndicator.classList.add('hidden');
-        }
-        
-        // Update statistics dengan database_faces dari response
-        updateStatistics(data.statistics || {}, data.database_faces || 0);
-        
-        // Update table
-        updateTable(currentFilter ? filterSessions(sessionsData, currentFilter) : sessionsData);
-        
-        // Update last update time
-        updateLastUpdateTime();
-        
-      } catch (error) {
-        console.error('Error loading sessions:', error);
-        showError('Gagal memuat data sesi');
-      }
-    }
+    document.getElementById('dateDetailSection').classList.remove('hidden');
 
-    function updateStatistics(stats, dbFaces) {
-      document.getElementById('totalSessions').textContent = stats.total_sessions || 0;
-      document.getElementById('totalVisitors').textContent = stats.total_visitors_all_time || 0;
-      document.getElementById('avgVisitors').textContent = stats.average_visitors_per_session || 0;
-      document.getElementById('avgDuration').textContent = stats.average_duration_minutes || 0;
-      document.getElementById('databaseFaces').textContent = dbFaces;
-    }
+    // format judul
+    const dt = new Date(dateStr + 'T00:00:00');
+    document.getElementById('dateDetailTitle').textContent =
+      `Detail: ${String(dt.getDate()).padStart(2,'0')} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
 
-    function updateLastUpdateTime() {
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      document.getElementById('lastUpdate').textContent = `Update: ${timeStr}`;
-    }
+    // summary
+    try {
+      const rs = await fetch(`/api/daily/${dateStr}`);
+      const ds = await rs.json();
+      const s  = ds.summary || {};
 
-    function updateTable(sessions) {
-      const tbody = document.getElementById('sessionsTableBody');
-      
-      if (!sessions || sessions.length === 0) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="9" class="px-6 py-12 text-center text-gray-500">
-              <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-              </svg>
-              <p class="text-lg font-medium">Tidak ada data sesi</p>
-              <p class="text-sm text-gray-400 mt-2">Mulai deteksi untuk membuat sesi baru</p>
-            </td>
-          </tr>
-        `;
+      document.getElementById('dateDetailStats').innerHTML = `
+        <div class="stat-card" style="padding:14px;">
+          <p class="section-label">Total Pengunjung</p>
+          <p class="stat-number" style="font-size:1.8rem;">${s.total_visitors||0}</p>
+        </div>
+        <div class="stat-card" style="padding:14px;">
+          <p class="section-label">Maks Bersamaan</p>
+          <p class="stat-number" style="font-size:1.8rem;">${s.max_concurrent||0}</p>
+        </div>
+        <div class="stat-card" style="padding:14px;">
+          <p class="section-label">Metode Deteksi</p>
+          <p style="font-size:.82rem;font-weight:600;color:#3b82f6;margin-top:6px;">${s.detection_method||'—'}</p>
+        </div>
+        <div class="stat-card" style="padding:14px;">
+          <p class="section-label">Catatan</p>
+          <p style="font-size:.82rem;color:#64748b;margin-top:6px;">${s.notes||'—'}</p>
+        </div>
+      `;
+    } catch(e) {}
+
+    // face table
+    try {
+      const rf = await fetch(`/api/daily/${dateStr}/faces`);
+      const df = await rf.json();
+      const faces = df.faces || [];
+
+      const tbody = document.getElementById('faceTbody');
+      if (faces.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="padding:32px;text-align:center;color:#94a3b8;">Tidak ada data wajah untuk tanggal ini</td></tr>`;
         return;
       }
 
-      tbody.innerHTML = sessions.map((session, index) => {
-        const statusClass = session.status === 'Selesai' ? 'status-selesai' : 
-                           session.status === 'Running' ? 'status-running' : 'status-gagal';
-        
-        // Highlight running session
-        const rowClass = session.status === 'Running' ? 'table-row bg-blue-50/50' : 'table-row';
-        
-        return `
-          <tr class="${rowClass}">
-            <td class="px-6 py-4 text-sm text-gray-900 font-medium">${index + 1}</td>
-            <td class="px-6 py-4 text-sm text-gray-900">${formatDate(session.date)}</td>
-            <td class="px-6 py-4 text-sm text-gray-900">${session.start_time}</td>
-            <td class="px-6 py-4 text-sm text-gray-900">${session.end_time || '<span class="text-blue-600 font-semibold">Sedang Berjalan</span>'}</td>
-            <td class="px-6 py-4 text-sm font-semibold ${session.status === 'Running' ? 'text-blue-600 animate-pulse' : 'text-blue-600'}">${session.total_visitors} Orang</td>
-            <td class="px-6 py-4 text-sm text-gray-600">${session.camera_location}</td>
-            <td class="px-6 py-4 text-sm text-gray-900">${session.duration_formatted}</td>
-            <td class="px-6 py-4">
-              <span class="status-badge ${statusClass}">
-                ${getStatusIcon(session.status)}
-                ${session.status}
-              </span>
-            </td>
-            <td class="px-6 py-4">
-              ${session.status !== 'Running' ? 
-                `<button onclick="deleteSession('${session.id}')" class="text-red-600 hover:text-red-800 font-medium text-sm">Hapus</button>` :
-                `<span class="text-gray-400 text-sm">Aktif</span>`
-              }
-            </td>
-          </tr>
-        `;
+      tbody.innerHTML = faces.map((f, i) => {
+        const fs = f.first_seen ? new Date(f.first_seen).toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—';
+        const ls = f.last_seen  ? new Date(f.last_seen) .toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—';
+        return `<tr>
+          <td style="color:#94a3b8;font-size:.82rem;">${i+1}</td>
+          <td><span style="font-family:'JetBrains Mono',monospace;font-size:.78rem;background:#f1f5f9;padding:2px 8px;border-radius:6px;">${f.face_id||''}</span></td>
+          <td style="color:#475569;">${fs}</td>
+          <td style="color:#475569;">${ls}</td>
+          <td><span class="badge badge-blue">${f.detection_count||1}×</span></td>
+          <td style="color:#64748b;font-size:.82rem;">${f.camera_label||'—'}</td>
+        </tr>`;
       }).join('');
+    } catch(e) { console.error('face detail:', e); }
+  }
+
+  function closeDateDetail() {
+    document.getElementById('dateDetailSection').classList.add('hidden');
+    selectedDate = null;
+    document.querySelectorAll('.date-card').forEach(el => el.classList.remove('active'));
+  }
+
+  // ── SESSIONS TABLE ──────────────────────────────────────────────────────────
+  function renderSessionsTable(sessions) {
+    const tbody = document.getElementById('sessionsTbody');
+    if (!sessions.length) {
+      tbody.innerHTML = `<tr><td colspan="9" style="padding:32px;text-align:center;color:#94a3b8;">Belum ada sesi</td></tr>`;
+      return;
     }
 
-    function getStatusIcon(status) {
-      if (status === 'Selesai') {
-        return '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>';
-      } else if (status === 'Running') {
-        return '<svg class="w-4 h-4 animate-spin" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1z" clip-rule="evenodd"/></svg>';
+    tbody.innerHTML = sessions.map((s,i) => {
+      const dt = new Date(s.date+'T00:00:00');
+      const dateStr = `${String(dt.getDate()).padStart(2,'0')} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
+      let badgeCls = 'badge-green', icon = '✓';
+      if (s.status === 'Running') { badgeCls = 'badge-blue badge-pulse'; icon = '●'; }
+      if (s.status === 'Gagal')   { badgeCls = 'badge-orange'; icon = '!'; }
+
+      return `<tr>
+        <td style="color:#94a3b8;font-size:.8rem;">${i+1}</td>
+        <td style="font-weight:600;">${dateStr}</td>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:.82rem;">${s.start_time}</td>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:.82rem;">${s.end_time||'<span style="color:#3b82f6;font-weight:600;">Running</span>'}</td>
+        <td><span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#3b82f6;">${s.total_visitors}</span></td>
+        <td style="font-size:.82rem;color:#64748b;">${s.camera_location}</td>
+        <td style="font-size:.82rem;">${s.duration_formatted}</td>
+        <td><span class="badge ${badgeCls}">${icon} ${s.status}</span></td>
+        <td>${s.status!=='Running'
+          ?`<button onclick="deleteSession('${s.id}')" style="font-size:.8rem;color:#ef4444;font-weight:600;cursor:pointer;border:none;background:none;">Hapus</button>`
+          :`<span style="color:#94a3b8;font-size:.8rem;">Aktif</span>`}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── CHART ──────────────────────────────────────────────────────────────────
+  function initTrendChart() {
+    trendChart = new Chart(document.getElementById('trendChart').getContext('2d'), {
+      type: 'bar',
+      data: { labels: [], datasets: [{
+        data: [],
+        backgroundColor: 'rgba(59,130,246,0.15)',
+        borderColor: 'rgba(59,130,246,.8)',
+        borderWidth: 2, borderRadius: 8,
+      }]},
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, grid: { color: 'rgba(226,232,240,.8)' }, ticks: { color: '#94a3b8' } },
+          x: { grid: { display: false }, ticks: { color: '#94a3b8', maxTicksLimit: 10 } },
+        },
+      },
+    });
+  }
+
+  function updateTrendChart(summaries) {
+    if (!trendChart) return;
+    const sorted = [...summaries].reverse(); // oldest first
+    trendChart.data.labels              = sorted.map(s => s.date.slice(5));   // MM-DD
+    trendChart.data.datasets[0].data    = sorted.map(s => s.total_visitors);
+    trendChart.update();
+  }
+
+  function reloadChart() {
+    loadDaily();
+  }
+
+  // ── FILTER ─────────────────────────────────────────────────────────────────
+  function applyFilter() {
+    const start = document.getElementById('startDate').value;
+    const end   = document.getElementById('endDate').value;
+    if (!start && !end) { filteredSummaries = dailySummaries; renderDateCards(filteredSummaries); return; }
+    filteredSummaries = dailySummaries.filter(s => {
+      if (start && s.date < start) return false;
+      if (end   && s.date > end)   return false;
+      return true;
+    });
+    renderDateCards(filteredSummaries);
+    updateTrendChart(filteredSummaries);
+  }
+
+  function clearFilter() {
+    document.getElementById('startDate').value = '';
+    document.getElementById('endDate').value   = '';
+    filteredSummaries = dailySummaries;
+    renderDateCards(filteredSummaries);
+    updateTrendChart(filteredSummaries);
+  }
+
+  // ── TABS ───────────────────────────────────────────────────────────────────
+  function switchTab(tab) {
+    currentTab = tab;
+    document.getElementById('tabDaily')   .classList.toggle('active', tab==='daily');
+    document.getElementById('tabSessions').classList.toggle('active', tab==='sessions');
+    document.getElementById('panelDaily')   .classList.toggle('hidden', tab!=='daily');
+    document.getElementById('panelSessions').classList.toggle('hidden', tab!=='sessions');
+    if (tab==='sessions') loadSessions();
+  }
+
+  // ── ACTIONS ────────────────────────────────────────────────────────────────
+  async function triggerManualSnapshot() {
+    try {
+      const r = await fetch('/api/daily/snapshot/manual', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({notes:'Manual save from UI'})});
+      const d = await r.json();
+      if (d.success) {
+        toast(`✅ Snapshot tersimpan: ${d.total_visitors} pengunjung, ${d.faces_logged} wajah`, 'success');
+        setTimeout(loadAll, 1000);
       } else {
-        return '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>';
+        toast('❌ Gagal menyimpan snapshot', 'error');
       }
-    }
+    } catch(e) { toast('❌ Error: ' + e.message, 'error'); }
+  }
 
-    function formatDate(dateStr) {
-      const [year, month, day] = dateStr.split('-');
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
-      return `${day} ${months[parseInt(month) - 1]} ${year}`;
-    }
+  function exportTodayCSV() {
+    const today = new Date().toISOString().split('T')[0];
+    window.location.href = `/api/daily/export/${today}`;
+  }
 
-    function filterByDate() {
-      const dateInput = document.getElementById('dateFilter');
-      currentFilter = dateInput.value;
-      
-      if (currentFilter) {
-        const filtered = filterSessions(sessionsData, currentFilter);
-        updateTable(filtered);
-      } else {
-        updateTable(sessionsData);
-      }
-    }
+  function exportDay() {
+    if (!selectedDate) return;
+    window.location.href = `/api/daily/export/${selectedDate}`;
+  }
 
-    function filterSessions(sessions, date) {
-      return sessions.filter(s => s.date === date);
-    }
+  async function deleteSession(id) {
+    if (!confirm('Hapus sesi ini?')) return;
+    const r = await fetch(`/api/sessions/${id}`, {method:'DELETE'});
+    const d = await r.json();
+    if (d.success) { toast('Sesi dihapus', 'success'); loadSessions(); }
+    else toast('Gagal menghapus', 'error');
+  }
 
-    function clearFilter() {
-      document.getElementById('dateFilter').value = '';
-      currentFilter = null;
-      updateTable(sessionsData);
-    }
+  // ── UTILS ──────────────────────────────────────────────────────────────────
+  function set(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+  function setTime(id) { const el = document.getElementById(id); if (el) el.textContent = new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
 
-    function refreshData() {
-      loadSessionsData();
-      showNotification('Data berhasil diperbarui', 'success');
-    }
-
-    async function deleteSession(sessionId) {
-      if (!confirm('Yakin ingin menghapus sesi ini?')) {
-        return;
-      }
-
-      try {
-        const response = await fetch(`/api/sessions/${sessionId}`, {
-          method: 'DELETE'
-        });
-
-        const data = await response.json();
-        
-        if (data.success) {
-          showNotification('Sesi berhasil dihapus', 'success');
-          loadSessionsData();
-        } else {
-          showNotification('Gagal menghapus sesi', 'error');
-        }
-      } catch (error) {
-        console.error('Error deleting session:', error);
-        showNotification('Terjadi kesalahan', 'error');
-      }
-    }
-
-    async function exportData() {
-      try {
-        const response = await fetch('/api/sessions/export');
-        const blob = await response.blob();
-        
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `data-pengunjung-${new Date().toISOString().split('T')[0]}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        
-        showNotification('Data berhasil diekspor', 'success');
-      } catch (error) {
-        console.error('Error exporting data:', error);
-        showNotification('Gagal mengekspor data', 'error');
-      }
-    }
-
-    function showNotification(message, type = 'info') {
-      const colors = {
-        success: 'bg-green-500',
-        error: 'bg-red-500',
-        info: 'bg-blue-500'
-      };
-
-      const notification = document.createElement('div');
-      notification.className = `fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-xl shadow-lg z-50 animate-bounce`;
-      notification.textContent = message;
-      
-      document.body.appendChild(notification);
-      
-      setTimeout(() => {
-        notification.remove();
-      }, 3000);
-    }
-
-    function showError(message) {
-      showNotification(message, 'error');
-    }
-  </script>
+  function toast(msg, type='info') {
+    const colors = {success:'#10b981', error:'#ef4444', info:'#3b82f6'};
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.style.borderLeftColor = colors[type]||'#3b82f6';
+    t.textContent = msg;
+    document.getElementById('toastArea').appendChild(t);
+    setTimeout(()=>{ t.style.transition='.3s'; t.style.opacity='0'; t.style.transform='translateX(360px)'; setTimeout(()=>t.remove(),300); }, 4000);
+  }
+</script>
 </body>
 </html>
