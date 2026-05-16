@@ -181,6 +181,19 @@
     }
     @keyframes toastIn { from{transform:translateX(360px);opacity:0} to{transform:translateX(0);opacity:1} }
 
+    /* ── COUNTDOWN ── */
+    .countdown-bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px; background: #fef3c7; border: 1px solid #fcd34d;
+      border-radius: 12px; font-size: .8rem; color: #92400e;
+    }
+    .countdown-num { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: .85rem; color: #b45309; }
+
+    /* ── CAMERA STATUS ── */
+    .cam-status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+    .cam-status-dot.ok  { background: #10b981; }
+    .cam-status-dot.err { background: #ef4444; }
+
     /* empty state */
     .empty-state { text-align: center; padding: 48px 24px; color: #94a3b8; }
     .empty-state svg { margin: 0 auto 16px; display: block; }
@@ -205,7 +218,7 @@
            alt="Logo" class="navbar-logo" onerror="this.style.display='none'" />
       <div>
         <div class="navbar-title">Data Pengunjung</div>
-        <div class="navbar-subtitle">Rekapitulasi Harian Face Counter — 2 Kamera</div>
+        <div class="navbar-subtitle">Rekapitulasi Harian Face Counter</div>
       </div>
     </div>
     <div class="navbar-right">
@@ -328,13 +341,19 @@
 
       <hr style="border:none;border-top:1px solid #f1f5f9;">
 
-      <!-- Sesi running sekarang -->
+      <!-- Live stats hari ini -->
       <div>
         <p class="section-label">Hari Ini (Live)</p>
         <div style="display:flex;flex-direction:column;gap:8px;font-size:.85rem;">
           <div style="display:flex;justify-content:space-between;">
-            <span style="color:#64748b;">Pengunjung</span>
+            <span style="color:#64748b;">Pengunjung Hari Ini</span>
+            <!-- FIX: pakai daily_total, bukan current_count -->
             <span id="todayVisitors" style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#3b82f6;">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="color:#64748b;">Sedang di Tempat</span>
+            <!-- TAMBAH: current_count untuk orang yang sedang ada -->
+            <span id="currentCount" style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#10b981;">0</span>
           </div>
           <div style="display:flex;justify-content:space-between;">
             <span style="color:#64748b;">Maks Bersamaan</span>
@@ -349,6 +368,27 @@
             <span id="lastUpdate" style="font-family:'JetBrains Mono',monospace;font-size:.78rem;color:#94a3b8;">-</span>
           </div>
         </div>
+      </div>
+
+      <hr style="border:none;border-top:1px solid #f1f5f9;">
+
+      <!-- Countdown reset tengah malam -->
+      <div>
+        <p class="section-label">Reset Otomatis</p>
+        <div id="countdownBar" class="countdown-bar">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Reset dalam</span>
+          <span class="countdown-num" id="countdownTimer">--:--:--</span>
+          <span>(00:00 WITA)</span>
+        </div>
+
+        <!-- Status snapshot hari ini -->
+        <div style="margin-top:8px;display:flex;align-items:center;gap:6px;font-size:.8rem;color:#64748b;">
+          <span id="snapshotStatus">Memeriksa status snapshot...</span>
+        </div>
+
+        <!-- Status stream tiap kamera -->
+        <div id="streamHealth" style="margin-top:8px;display:flex;flex-direction:column;gap:4px;font-size:.8rem;color:#64748b;"></div>
       </div>
     </div>
   </div>
@@ -368,11 +408,9 @@
 
     <!-- Tab: Per Tanggal -->
     <div id="panelDaily">
-      <div id="dailyGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mb-4">
-        <!-- date cards injected here -->
-      </div>
+      <div id="dailyGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mb-4"></div>
 
-      <!-- Detail tabel (muncul ketika date-card diklik) -->
+      <!-- Detail tabel -->
       <div id="dateDetailSection" class="hidden mt-4">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
           <h3 id="dateDetailTitle" style="font-size:1rem;font-weight:700;color:#1e293b;">—</h3>
@@ -384,11 +422,7 @@
             <button onclick="closeDateDetail()" style="padding:6px 14px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;font-size:.8rem;font-weight:600;cursor:pointer;color:#475569;">✕ Tutup</button>
           </div>
         </div>
-
-        <!-- mini stats -->
         <div id="dateDetailStats" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4"></div>
-
-        <!-- face table -->
         <div class="tbl-wrap">
           <table>
             <thead>
@@ -425,15 +459,13 @@
               <th>Tanggal</th>
               <th>Mulai</th>
               <th>Selesai</th>
-              <th>Total</th>
               <th>Lokasi</th>
-              <th>Durasi</th>
               <th>Status</th>
               <th>Aksi</th>
             </tr>
           </thead>
           <tbody id="sessionsTbody">
-            <tr><td colspan="9" style="padding:32px;text-align:center;color:#94a3b8;">Memuat...</td></tr>
+            <tr><td colspan="7" style="padding:32px;text-align:center;color:#94a3b8;">Memuat...</td></tr>
           </tbody>
         </table>
       </div>
@@ -442,16 +474,18 @@
 
 </main>
 
-<!-- ── TOAST container ── -->
 <div id="toastArea"></div>
 
 <script>
   // ── STATE ──────────────────────────────────────────────────────────────────
-  let dailySummaries  = [];
+  let dailySummaries    = [];
   let filteredSummaries = [];
-  let selectedDate    = null;
-  let currentTab      = 'daily';
-  let trendChart      = null;
+  let selectedDate      = null;
+  let currentTab        = 'daily';
+  let trendChart        = null;
+  let countdownInterval = null;
+  let nextResetIn       = 0;   // detik, diupdate dari SSE/api/stats
+  let _liveTotal        = 0;
 
   const MONTHS = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
 
@@ -461,21 +495,109 @@
     loadAll();
     setInterval(loadLiveStats, 5000);
     setInterval(loadAll, 30000);
+    startCountdown();
 
-    // SSE
+    // ── SSE ──────────────────────────────────────────────────────────────
     const es = new EventSource('/api/events');
+
+    // FIX: stats event sekarang sudah berisi semua field lengkap dari server
     es.addEventListener('stats', e => {
       const d = JSON.parse(e.data);
-      set('todayVisitors', d.current_count ?? 0);
-      set('dbFaces', d.database_faces ?? 0);
+
+      // FIX: daily_total = total kunjungan unik hari ini (bukan current_count)
+      set('todayVisitors', d.daily_total   ?? 0);
+      // TAMBAH: current_count = orang yang sedang ada di frame sekarang
+      set('currentCount',  d.current_count ?? 0);
+      // FIX: max_count dari SSE (sudah ada di payload sekarang)
+      set('todayMax',      d.max_count     ?? 0);
+      set('dbFaces',       d.database_faces ?? 0);
       setTime('lastUpdate');
+
+      // Countdown dari server (sinkron dengan WITA)
+      if (d.next_reset_in != null) {
+        nextResetIn = d.next_reset_in;
+      }
+
+      // Live badge
+      const live = document.getElementById('liveIndicator');
+      live.classList.toggle('hidden', !d.detection_enabled);
+
+      // Status deteksi
+      const ds = document.getElementById('detectionStatus');
+      if (d.detection_enabled) {
+        ds.className   = 'badge badge-green';
+        ds.textContent = 'Aktif';
+      } else {
+        ds.className   = 'badge badge-gray';
+        ds.textContent = 'Nonaktif';
+      }
+
+      // Status snapshot hari ini
+      updateSnapshotStatus(d.snapshot_saved_today);
+
+      // Stream health kamera
+      if (d.stream_health) updateStreamHealth(d.stream_health);
     });
+
+    // FIX: midnight_reset — reset counter UI ke 0, lalu reload data harian
     es.addEventListener('midnight_reset', e => {
       const d = JSON.parse(e.data);
       toast(`✅ Reset tengah malam — data ${d.date} tersimpan (${d.total_visitors} pengunjung)`, 'success');
+      // Reset counter hari ini ke 0 langsung di UI
+      set('todayVisitors', 0);
+      set('currentCount',  0);
+      set('todayMax',      0);
+      // Reload semua data (stat cards, chart, date cards)
       setTimeout(loadAll, 2000);
     });
+
+    // TAMBAH: snapshot_saved — update stat cards tanpa reload penuh
+    es.addEventListener('snapshot_saved', e => {
+      updateSnapshotStatus(true);
+      // Reload date cards agar snapshot baru muncul
+      setTimeout(loadDaily, 1000);
+    });
+
+    es.addEventListener('detection_toggled', e => {
+      loadLiveStats();
+    });
   });
+
+  // ── COUNTDOWN ──────────────────────────────────────────────────────────────
+  function startCountdown() {
+    if (countdownInterval) clearInterval(countdownInterval);
+    countdownInterval = setInterval(() => {
+      if (nextResetIn > 0) nextResetIn--;
+      const h = Math.floor(nextResetIn / 3600);
+      const m = Math.floor((nextResetIn % 3600) / 60);
+      const s = nextResetIn % 60;
+      const el = document.getElementById('countdownTimer');
+      if (el) el.textContent = `${pad(h)}:${pad(m)}:${pad(s)}`;
+    }, 1000);
+  }
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  function updateSnapshotStatus(saved) {
+    const el = document.getElementById('snapshotStatus');
+    if (!el) return;
+    if (saved) {
+      el.innerHTML = `<span style="color:#10b981;font-weight:600;">✓ Snapshot hari ini sudah tersimpan</span>`;
+    } else {
+      el.innerHTML = `<span style="color:#f59e0b;font-weight:600;">⚠ Snapshot belum disimpan hari ini</span>`;
+    }
+  }
+
+  function updateStreamHealth(health) {
+    const el = document.getElementById('streamHealth');
+    if (!el || !health.length) return;
+    el.innerHTML = health.map(h => `
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="cam-status-dot ${h.is_running ? 'ok' : 'err'}"></span>
+        <span>${h.label}</span>
+        <span style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:.75rem;color:#94a3b8;">${h.fps} fps</span>
+      </div>
+    `).join('');
+  }
 
   // ── LOAD ALL ───────────────────────────────────────────────────────────────
   async function loadAll() {
@@ -489,10 +611,9 @@
       const d = await r.json();
       if (!d.success) return;
 
-      dailySummaries = d.summaries || [];
+      dailySummaries    = d.summaries || [];
       filteredSummaries = dailySummaries;
 
-      // Overall stats
       const ov = d.overall || {};
       set('totalDays',     ov.total_days     || 0);
       set('grandTotal',    ov.grand_total     || 0);
@@ -520,28 +641,39 @@
     try {
       const r = await fetch('/api/stats');
       const d = await r.json();
-      set('todayVisitors', d.daily_total   || 0);
-      set('todayMax',      d.max_count     || 0);
-      set('dbFaces',       d.database_faces|| 0);
+
+      // FIX: mapping field yang benar
+      set('todayVisitors', d.daily_total    || 0);   // total unik hari ini
+      _liveTotal = d.daily_total || 0;
+      set('currentCount',  d.current_count  || 0);   // sedang di frame
+      set('todayMax',      d.max_count      || 0);   // maks bersamaan
+      set('dbFaces',       d.database_faces || 0);
       setTime('lastUpdate');
+
+      // Countdown — sinkron dari server
+      if (d.next_reset_in != null) nextResetIn = d.next_reset_in;
 
       const live = document.getElementById('liveIndicator');
       live.classList.toggle('hidden', !d.detection_enabled);
 
       const ds = document.getElementById('detectionStatus');
       if (d.detection_enabled) {
-        ds.className = 'badge badge-green';
+        ds.className   = 'badge badge-green';
         ds.textContent = 'Aktif';
       } else {
-        ds.className = 'badge badge-gray';
+        ds.className   = 'badge badge-gray';
         ds.textContent = 'Nonaktif';
       }
+
+      updateSnapshotStatus(d.snapshot_saved_today);
+      if (d.stream_health) updateStreamHealth(d.stream_health);
+
     } catch(e) {}
   }
 
   // ── DATE CARDS ─────────────────────────────────────────────────────────────
   function renderDateCards(summaries) {
-    const grid = document.getElementById('dailyGrid');
+    const grid  = document.getElementById('dailyGrid');
     const empty = document.getElementById('dailyEmpty');
 
     if (!summaries || summaries.length === 0) {
@@ -578,19 +710,16 @@
   async function loadDateDetail(dateStr) {
     selectedDate = dateStr;
 
-    // highlight active card
     document.querySelectorAll('.date-card').forEach(el => {
       el.classList.toggle('active', el.onclick?.toString().includes(dateStr));
     });
 
     document.getElementById('dateDetailSection').classList.remove('hidden');
 
-    // format judul
     const dt = new Date(dateStr + 'T00:00:00');
     document.getElementById('dateDetailTitle').textContent =
       `Detail: ${String(dt.getDate()).padStart(2,'0')} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
 
-    // summary
     try {
       const rs = await fetch(`/api/daily/${dateStr}`);
       const ds = await rs.json();
@@ -616,7 +745,6 @@
       `;
     } catch(e) {}
 
-    // face table
     try {
       const rf = await fetch(`/api/daily/${dateStr}/faces`);
       const df = await rf.json();
@@ -650,35 +778,49 @@
   }
 
   // ── SESSIONS TABLE ──────────────────────────────────────────────────────────
-  function renderSessionsTable(sessions) {
-    const tbody = document.getElementById('sessionsTbody');
-    if (!sessions.length) {
-      tbody.innerHTML = `<tr><td colspan="9" style="padding:32px;text-align:center;color:#94a3b8;">Belum ada sesi</td></tr>`;
-      return;
-    }
-
-    tbody.innerHTML = sessions.map((s,i) => {
-      const dt = new Date(s.date+'T00:00:00');
-      const dateStr = `${String(dt.getDate()).padStart(2,'0')} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
-      let badgeCls = 'badge-green', icon = '✓';
-      if (s.status === 'Running') { badgeCls = 'badge-blue badge-pulse'; icon = '●'; }
-      if (s.status === 'Gagal')   { badgeCls = 'badge-orange'; icon = '!'; }
-
-      return `<tr>
-        <td style="color:#94a3b8;font-size:.8rem;">${i+1}</td>
-        <td style="font-weight:600;">${dateStr}</td>
-        <td style="font-family:'JetBrains Mono',monospace;font-size:.82rem;">${s.start_time}</td>
-        <td style="font-family:'JetBrains Mono',monospace;font-size:.82rem;">${s.end_time||'<span style="color:#3b82f6;font-weight:600;">Running</span>'}</td>
-        <td><span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:#3b82f6;">${s.total_visitors}</span></td>
-        <td style="font-size:.82rem;color:#64748b;">${s.camera_location}</td>
-        <td style="font-size:.82rem;">${s.duration_formatted}</td>
-        <td><span class="badge ${badgeCls}">${icon} ${s.status}</span></td>
-        <td>${s.status!=='Running'
-          ?`<button onclick="deleteSession('${s.id}')" style="font-size:.8rem;color:#ef4444;font-weight:600;cursor:pointer;border:none;background:none;">Hapus</button>`
-          :`<span style="color:#94a3b8;font-size:.8rem;">Aktif</span>`}</td>
-      </tr>`;
-    }).join('');
+function renderSessionsTable(sessions) {
+  const tbody = document.getElementById('sessionsTbody');
+  if (!sessions.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="padding:32px;text-align:center;color:#94a3b8;">Belum ada sesi</td></tr>`;
+    return;
   }
+
+  tbody.innerHTML = sessions.map((s, i) => {
+    // Parse tanggal & jam dari start_time (ISO string dari server)
+    const startDt = new Date(s.start_time);
+
+    const day    = String(startDt.getDate()).padStart(2, '0');
+    const month  = MONTHS[startDt.getMonth()];
+    const year   = startDt.getFullYear();
+    const dateStr = `${day} ${month} ${year}`;
+
+    const startTime = startDt.toLocaleTimeString('id-ID', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+
+    const endTime = s.end_time
+      ? new Date(s.end_time).toLocaleTimeString('id-ID', {
+          hour: '2-digit', minute: '2-digit', second: '2-digit'
+        })
+      : '<span style="color:#3b82f6;font-weight:600;">Running</span>';
+
+    let badgeCls = 'badge-green', icon = '✓';
+    if (s.status === 'Running') { badgeCls = 'badge-blue badge-pulse'; icon = '●'; }
+    if (s.status === 'Gagal')   { badgeCls = 'badge-orange'; icon = '!'; }
+
+    return `<tr>
+      <td style="color:#94a3b8;font-size:.8rem;">${i + 1}</td>
+      <td style="font-weight:600;">${dateStr}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:.82rem;">${startTime}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:.82rem;">${endTime}</td>
+      <td style="font-size:.82rem;color:#64748b;">${s.camera_location}</td>
+      <td><span class="badge ${badgeCls}">${icon} ${s.status}</span></td>
+      <td>${s.status !== 'Running'
+        ? '<button onclick="deleteSession(\'' + s.id + '\')" style="font-size:.8rem;color:#ef4444;font-weight:600;cursor:pointer;border:none;background:none;">Hapus</button>'
+        : '<span style="color:#94a3b8;font-size:.8rem;">Aktif</span>'}</td>
+    </tr>`;
+  }).join('');
+}
 
   // ── CHART ──────────────────────────────────────────────────────────────────
   function initTrendChart() {
@@ -703,15 +845,13 @@
 
   function updateTrendChart(summaries) {
     if (!trendChart) return;
-    const sorted = [...summaries].reverse(); // oldest first
-    trendChart.data.labels              = sorted.map(s => s.date.slice(5));   // MM-DD
-    trendChart.data.datasets[0].data    = sorted.map(s => s.total_visitors);
+    const sorted = [...summaries].reverse();
+    trendChart.data.labels           = sorted.map(s => s.date.slice(5));
+    trendChart.data.datasets[0].data = sorted.map(s => s.total_visitors);
     trendChart.update();
   }
 
-  function reloadChart() {
-    loadDaily();
-  }
+  function reloadChart() { loadDaily(); }
 
   // ── FILTER ─────────────────────────────────────────────────────────────────
   function applyFilter() {
@@ -748,11 +888,17 @@
   // ── ACTIONS ────────────────────────────────────────────────────────────────
   async function triggerManualSnapshot() {
     try {
-      const r = await fetch('/api/daily/snapshot/manual', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({notes:'Manual save from UI'})});
+      const r = await fetch('/api/daily/snapshot/manual', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({notes: 'Manual save from UI'})
+      });
       const d = await r.json();
       if (d.success) {
         toast(`✅ Snapshot tersimpan: ${d.total_visitors} pengunjung, ${d.faces_logged} wajah`, 'success');
-        setTimeout(loadAll, 1000);
+        // FIX: SSE 'snapshot_saved' otomatis trigger reload,
+        // tapi fallback reload manual jika SSE lambat
+        setTimeout(loadDaily, 1500);
       } else {
         toast('❌ Gagal menyimpan snapshot', 'error');
       }
@@ -779,7 +925,10 @@
 
   // ── UTILS ──────────────────────────────────────────────────────────────────
   function set(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
-  function setTime(id) { const el = document.getElementById(id); if (el) el.textContent = new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+  function setTime(id) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  }
 
   function toast(msg, type='info') {
     const colors = {success:'#10b981', error:'#ef4444', info:'#3b82f6'};
@@ -788,7 +937,10 @@
     t.style.borderLeftColor = colors[type]||'#3b82f6';
     t.textContent = msg;
     document.getElementById('toastArea').appendChild(t);
-    setTimeout(()=>{ t.style.transition='.3s'; t.style.opacity='0'; t.style.transform='translateX(360px)'; setTimeout(()=>t.remove(),300); }, 4000);
+    setTimeout(()=>{
+      t.style.transition='.3s'; t.style.opacity='0'; t.style.transform='translateX(360px)';
+      setTimeout(()=>t.remove(),300);
+    }, 4000);
   }
 </script>
 </body>
