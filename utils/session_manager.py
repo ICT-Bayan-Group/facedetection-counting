@@ -57,6 +57,19 @@ class SessionManager:
         print(f"🚀 Session started: {sid} | {camera_location}")
         return self.current_session
 
+    def end_all_running_sessions(self, total_visitors=0, status='Interrupted', notes='') -> int:
+        now = datetime.now().isoformat()
+        with self._conn() as c:
+            n = c.execute(
+                "UPDATE sessions SET end_time=?, total_visitors=?, status=?, notes=? "
+                "WHERE status='Active' AND end_time IS NULL",
+                (now, total_visitors, status, notes)
+            ).rowcount
+            c.commit()
+        if n > 0:
+            print(f"⏹️  Closed {n} stale running session(s)")
+        return n
+
     def end_session(self, total_visitors=0, max_concurrent=0,
                     status='Selesai', notes='') -> Optional[dict]:
         if not self.current_session: return None

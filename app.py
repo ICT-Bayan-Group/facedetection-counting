@@ -19,6 +19,23 @@ app  = Flask(__name__)
 CORS(app)
 
 # ─────────────────────────────────────────────────────────────────────────────
+# TIMEZONE WITA (UTC+8)
+# ─────────────────────────────────────────────────────────────────────────────
+from datetime import datetime, timezone, timedelta
+WITA = timezone(timedelta(hours=8))
+
+def now_wita() -> datetime:
+    return datetime.now(WITA)
+
+def today_wita() -> str:
+    return now_wita().strftime('%Y-%m-%d')
+
+def seconds_until_midnight_wita() -> int:
+    now  = now_wita()
+    midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return int((midnight - now).total_seconds())
+
+# ─────────────────────────────────────────────────────────────────────────────
 # GLOBAL STATE
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -34,9 +51,9 @@ session_start_time     = None
 _sse_clients: list[list] = []
 _sse_lock = threading.Lock()
 
-# ── NEW: snapshot DB + scheduler ──────────────────────────────────────────
-snapshot_db: DailySnapshotDB    = None
-midnight_scheduler              = None
+# Snapshot DB + scheduler
+snapshot_db: DailySnapshotDB = None
+midnight_scheduler           = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -125,6 +142,12 @@ def init_snapshot_system():
 def auto_start_session():
     global detection_enabled, current_session_active, session_start_time
     if not current_session_active and detection_enabled:
+        mgr = get_session_manager()
+        # Tutup semua sesi Active lama sebelum buat yang baru
+        mgr.end_all_running_sessions(
+            status='Interrupted',
+            notes='Closed on server restart'
+        )
         sess = get_session_manager().start_session("CCTV Hall A (2 Kamera)")
         current_session_active = True
         session_start_time = time.time()
@@ -248,7 +271,7 @@ def sse_events():
     def stream():
         try:
             stats = _merged_stats()
-            yield f"event: stats\ndata: {json.dumps(stats)}\n\n"
+            yield f"event: stats\ndata: {json.dumps(_build_stats_payload(stats))}\n\n"
         except Exception:
             pass
 
@@ -291,42 +314,92 @@ def _merged_stats() -> dict:
                                      + s1.get('current_count', 0))
         merged['active_trackers'] = (merged.get('active_trackers', 0)
                                      + s1.get('active_trackers', 0))
+        # FIX: daily_total juga harus dijumlah dari kedua kamera
+        merged['daily_total']     = (merged.get('daily_total', 0)
+                                     + s1.get('daily_total', 0))
+        merged['max_count']       = max(merged.get('max_count', 0),
+                                        s1.get('max_count', 0))
         merged['fps']             = round(
             (merged.get('fps', 0) + s1.get('fps', 0)) / 2, 1)
         merged['processing_fps']  = round(
             (merged.get('processing_fps', 0) + s1.get('processing_fps', 0)) / 2, 1)
         merged['camera_stats'] = [
             {
-                'cam_id': i,
-                'label':  Config.CAMERAS[i]['label'],
+                'cam_id':        i,
+                'label':         Config.CAMERAS[i]['label'],
                 'current_count': active[0].get_statistics().get('current_count', 0)
                                  if i == 0 else s1.get('current_count', 0),
-                'fps': active[0].get_statistics().get('fps', 0)
-                       if i == 0 else s1.get('fps', 0),
+                'daily_total':   active[0].get_statistics().get('daily_total', 0)
+                                 if i == 0 else s1.get('daily_total', 0),
+                'fps':           active[0].get_statistics().get('fps', 0)
+                                 if i == 0 else s1.get('fps', 0),
+                'is_running':    active[i].is_running if i < len(active) else False,
             }
             for i in range(len(active))
         ]
 
     return merged
 
+
+def _build_stats_payload(stats: dict) -> dict:
+    """
+    Bangun payload lengkap untuk /api/stats dan SSE broadcast.
+    Satu sumber kebenaran — tidak ada duplikasi field.
+    """
+    nw = now_wita()
+    today = nw.strftime('%Y-%m-%d')
+
+    # Hitung snapshot sudah disimpan hari ini?
+    snapshot_saved_today = False
+    if snapshot_db:
+        snapshot_saved_today = snapshot_db.get_summary_for_date(today) is not None
+
+    # Uptime sesi aktif
+    uptime = int(time.time() - session_start_time) if session_start_time else 0
+
+    # Stream health per kamera
+    stream_health = []
+    for i, c in enumerate(counters):
+        stream_health.append({
+            'cam_id':    i,
+            'label':     Config.CAMERAS[i]['label'],
+            'is_running': c.is_running if c else False,
+            'fps':        round(c.fps, 1) if c else 0,
+        })
+
+    return {
+        # ── Counter utama ──────────────────────────────────────────────
+        'current_count':     stats.get('current_count', 0),     # sedang di frame
+        'daily_total':       stats.get('daily_total', 0),        # total unik hari ini
+        'max_count':         stats.get('max_count', 0),          # maks bersamaan hari ini
+        'database_faces':    stats.get('database_size', 0),      # total wajah di DB
+        # ── Performa ───────────────────────────────────────────────────
+        'fps':               stats.get('fps', 0),
+        'processing_fps':    stats.get('processing_fps', 0),
+        'active_ids':        stats.get('active_trackers', 0),
+        # ── Status ─────────────────────────────────────────────────────
+        'detection_enabled': detection_enabled,
+        'session_active':    current_session_active,
+        'session_uptime':    uptime,
+        # ── Waktu WITA ─────────────────────────────────────────────────
+        'today_date':        today,
+        'wita_time':         nw.strftime('%H:%M:%S'),
+        'next_reset_in':     seconds_until_midnight_wita(),      # detik sampai 00:00 WITA
+        # ── Snapshot ───────────────────────────────────────────────────
+        'snapshot_saved_today': snapshot_saved_today,
+        # ── Per kamera ─────────────────────────────────────────────────
+        'camera_stats':      stats.get('camera_stats', []),
+        'stream_health':     stream_health,
+    }
+
 # ─────────────────────────────────────────────────────────────────────────────
-# API — STATS
+# API — STATS (FIXED & EXTENDED)
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.route('/api/stats')
 def get_stats():
     stats = _merged_stats()
-    return jsonify({
-        'current_count':     stats.get('current_count', 0),
-        'max_count':         stats.get('max_count', 0),
-        'daily_total':       stats.get('daily_total', 0),
-        'database_faces':    stats.get('database_size', 0),
-        'fps':               stats.get('fps', 0),
-        'processing_fps':    stats.get('processing_fps', 0),
-        'active_ids':        stats.get('active_trackers', 0),
-        'detection_enabled': detection_enabled,
-        'camera_stats':      stats.get('camera_stats', []),
-    })
+    return jsonify(_build_stats_payload(stats))
 
 
 @app.route('/api/stats/<int:cam_id>')
@@ -351,12 +424,15 @@ def health_check():
         })
 
     c0 = counters[0]
+    nw = now_wita()
     return jsonify({
         'status':            'ok',
         'cameras':           cam_health,
         'detector':          c0.detector_type if c0 else 'N/A',
         'detection_enabled': detection_enabled,
         'sse_clients':       len(_sse_clients),
+        'wita_time':         nw.strftime('%H:%M:%S'),
+        'next_reset_in':     seconds_until_midnight_wita(),
         'timestamp':         time.strftime('%Y-%m-%dT%H:%M:%S'),
     })
 
@@ -459,18 +535,11 @@ def export_sessions_csv():
     )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# API — DAILY SNAPSHOTS  ← NEW
+# API — DAILY SNAPSHOTS
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.route('/api/daily')
 def get_daily_list():
-    """
-    Daftar semua hari yang ada di snapshot DB.
-    Query params:
-      limit  (int, default 90)
-      start  (YYYY-MM-DD)
-      end    (YYYY-MM-DD)
-    """
     if snapshot_db is None:
         return jsonify({'success': False, 'message': 'Snapshot DB not ready'}), 503
 
@@ -495,10 +564,6 @@ def get_daily_list():
 
 @app.route('/api/daily/<date_str>')
 def get_daily_detail(date_str: str):
-    """
-    Ringkasan satu hari.
-    date_str format: YYYY-MM-DD
-    """
     if snapshot_db is None:
         return jsonify({'success': False, 'message': 'Snapshot DB not ready'}), 503
 
@@ -511,11 +576,6 @@ def get_daily_detail(date_str: str):
 
 @app.route('/api/daily/<date_str>/faces')
 def get_daily_faces(date_str: str):
-    """
-    Semua wajah yang tertangkap pada tanggal tertentu.
-    Query params:
-      limit (int, default 1000)
-    """
     if snapshot_db is None:
         return jsonify({'success': False, 'message': 'Snapshot DB not ready'}), 503
 
@@ -532,7 +592,6 @@ def get_daily_faces(date_str: str):
 
 @app.route('/api/daily/export/<date_str>')
 def export_daily_csv(date_str: str):
-    """Export data harian ke CSV."""
     if snapshot_db is None:
         return jsonify({'success': False}), 503
 
@@ -543,7 +602,6 @@ def export_daily_csv(date_str: str):
     output = io.StringIO()
     writer = csv.writer(output)
 
-    # Header info
     writer.writerow(['Laporan Harian Face Counter'])
     writer.writerow(['Tanggal', date_str])
     if summary:
@@ -551,7 +609,6 @@ def export_daily_csv(date_str: str):
         writer.writerow(['Maks Bersamaan',   summary.get('max_concurrent', 0)])
     writer.writerow([])
 
-    # Face table
     writer.writerow(['No', 'Face ID', 'Pertama Terlihat', 'Terakhir Terlihat',
                      'Jumlah Deteksi', 'Kamera'])
     for i, f in enumerate(faces, 1):
@@ -574,28 +631,24 @@ def export_daily_csv(date_str: str):
 
 @app.route('/api/daily/snapshot/manual', methods=['POST'])
 def manual_snapshot():
-    """
-    Trigger simpan snapshot secara manual (tanpa reset).
-    Berguna untuk test atau backup sewaktu-waktu.
-    """
     if midnight_scheduler is None:
         return jsonify({'success': False, 'message': 'Scheduler not ready'}), 503
 
     data      = request.get_json() or {}
-    today_str = time.strftime('%Y-%m-%d')
+    today_str = today_wita()
     counters_ = [c for c in counters if c is not None]
 
     if not counters_:
         return jsonify({'success': False, 'message': 'No active counters'}), 503
 
-    total_visitors = 0
-    max_concurrent = 0
+    total_visitors   = 0
+    max_concurrent   = 0
     detection_method = ""
 
     for c in counters_:
-        stats             = c.get_statistics()
-        total_visitors   += stats.get('daily_total', 0)
-        max_concurrent    = max(max_concurrent, stats.get('max_count', 0))
+        stats            = c.get_statistics()
+        total_visitors  += stats.get('daily_total', 0)
+        max_concurrent   = max(max_concurrent, stats.get('max_count', 0))
         if not detection_method:
             detection_method = stats.get('detection_method', '')
 
@@ -607,14 +660,21 @@ def manual_snapshot():
         notes            = data.get('notes', 'Manual snapshot'),
     )
 
-    # Log faces
+    n = 0
     try:
         face_db = counters_[0].face_db
         faces   = face_db.get_all_faces_meta(limit=10000)
         n = snapshot_db.log_faces_for_date(today_str, faces, "All Cameras")
     except Exception as e:
-        n = 0
         print(f"⚠️  manual snapshot face log: {e}")
+
+    # FIX: broadcast SSE agar UI refresh otomatis setelah snapshot manual
+    _broadcast_sse('snapshot_saved', {
+        'date':           today_str,
+        'total_visitors': total_visitors,
+        'max_concurrent': max_concurrent,
+        'faces_logged':   n,
+    })
 
     return jsonify({
         'success':        ok,
@@ -649,10 +709,9 @@ def toggle_detection():
             status         = 'Selesai',
             notes          = 'Manual stop',
         )
-        # Simpan snapshot saat deteksi dihentikan manual
         if snapshot_db:
             snapshot_db.save_daily_snapshot(
-                snapshot_date  = time.strftime('%Y-%m-%d'),
+                snapshot_date  = today_wita(),
                 total_visitors = stats.get('daily_total', 0),
                 max_concurrent = stats.get('max_count', 0),
                 notes          = 'Detection manually stopped',
@@ -660,9 +719,7 @@ def toggle_detection():
             try:
                 face_db = get_counter(0).face_db
                 faces   = face_db.get_all_faces_meta(limit=10000)
-                snapshot_db.log_faces_for_date(
-                    time.strftime('%Y-%m-%d'), faces, "All Cameras"
-                )
+                snapshot_db.log_faces_for_date(today_wita(), faces, "All Cameras")
             except Exception as e:
                 print(f"⚠️  toggle snapshot face log: {e}")
 
@@ -682,7 +739,7 @@ def reset_stats():
     return jsonify({'success': True, 'message': 'Statistics reset (semua kamera)'})
 
 # ─────────────────────────────────────────────────────────────────────────────
-# BACKGROUND: broadcast stats SSE tiap 3 detik
+# BACKGROUND: broadcast stats SSE tiap 3 detik (FIXED — semua field lengkap)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _stats_broadcaster():
@@ -690,15 +747,9 @@ def _stats_broadcaster():
     while True:
         try:
             if _sse_clients and any(counters):
-                stats = _merged_stats()
-                _broadcast_sse('stats', {
-                    'current_count':  stats.get('current_count', 0),
-                    'daily_total':    stats.get('daily_total', 0),
-                    'database_faces': stats.get('database_size', 0),
-                    'fps':            stats.get('fps', 0),
-                    'active_ids':     stats.get('active_trackers', 0),
-                    'camera_stats':   stats.get('camera_stats', []),
-                })
+                stats   = _merged_stats()
+                payload = _build_stats_payload(stats)
+                _broadcast_sse('stats', payload)
         except Exception as e:
             print(f"⚠️  SSE broadcast error: {e}")
         time.sleep(3)
@@ -738,10 +789,8 @@ if __name__ == '__main__':
     print(f"🔴 SSE Events         : http://{local_ip}:{Config.PORT}/api/events")
     print("="*65 + "\n")
 
-    # ── Init snapshot system SEBELUM kamera ──────────────────────────────
     init_snapshot_system()
 
-    # ── Inisialisasi kedua kamera secara paralel ──────────────────────────
     print("🔄 Memulai kedua kamera secara paralel...")
     threads = []
     for cam_id in range(len(Config.CAMERAS)):
@@ -761,7 +810,6 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         pass
     finally:
-        # ── Graceful shutdown: simpan snapshot sebelum mati ──────────────
         print("\n\n⏸️  Stopping — saving shutdown snapshot...")
         if midnight_scheduler:
             midnight_scheduler.save_shutdown_snapshot(notes="Server shutdown (KeyboardInterrupt)")

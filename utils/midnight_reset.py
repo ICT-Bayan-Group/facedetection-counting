@@ -5,6 +5,11 @@ MidnightResetScheduler
 - Tepat pukul 00:00:00 WITA → simpan snapshot harian → reset counter
 - Mendaftarkan signal-handler (SIGINT / SIGTERM) agar data tersimpan
   ketika server dimatikan kapan saja
+
+FIX v2:
+- Reset counter via method reset_daily_stats() yang thread-safe
+- Tidak lagi akses sm.* langsung dari luar (race condition)
+- Tidak reset face_db — wajah dipertahankan untuk anti-duplicate lintas hari
 """
 
 import signal
@@ -14,7 +19,6 @@ import time
 from datetime import datetime, timezone, timedelta
 from typing import Callable
 
-# WITA = UTC+8
 WITA = timezone(timedelta(hours=8))
 
 
@@ -74,21 +78,17 @@ class MidnightResetScheduler:
                 now = now_wita()
                 seconds_until_midnight = self._seconds_until_midnight(now)
 
-                # Tidur sampai 60 detik sebelum tengah malam
                 if seconds_until_midnight > 60:
                     sleep_time = seconds_until_midnight - 60
-                    # Tidur maksimum 300 detik sekaligus agar bisa di-stop
                     time.sleep(min(sleep_time, 300))
                     continue
 
-                # Polling setiap detik di window ±30 detik sekitar tengah malam
                 now = now_wita()
                 h, m, s = now.hour, now.minute, now.second
 
                 if h == 0 and m == 0 and s <= 5:
                     print(f"\n🕛 MIDNIGHT RESET TRIGGERED — {now.strftime('%Y-%m-%d %H:%M:%S')} WITA")
                     self._save_snapshot_and_reset()
-                    # Tunggu 10 detik agar tidak trigger dua kali
                     time.sleep(10)
                 else:
                     time.sleep(1)
@@ -112,22 +112,18 @@ class MidnightResetScheduler:
         2. Simpan daily_summary ke snapshot DB
         3. Simpan semua wajah unik hari ini ke daily_face_log
         4. End sesi yang masih Running
-        5. Reset semua counter
+        5. Reset counter via reset_daily_stats() yang thread-safe
         """
-        today_str = now_wita().strftime('%Y-%m-%d')
-        # Sebenarnya sudah jadi esok hari setelah midnight,
-        # snapshot disimpan untuk KEMARIN
-        yesterday_str = (now_wita() - timedelta(days=1)).strftime('%Y-%m-%d')
-        snap_date = yesterday_str  # data yang direset adalah milik kemarin
+        snap_date = (now_wita() - timedelta(days=1)).strftime('%Y-%m-%d')
 
         counters = [c for c in self._get_counters() if c is not None]
         if not counters:
             print("⚠️  No active counters, skip snapshot")
             return
 
-        # ── 1. Kumpulkan statistik gabungan ────────────────────────────
-        total_visitors  = 0
-        max_concurrent  = 0
+        # ── 1. Kumpulkan statistik ─────────────────────────────────────
+        total_visitors   = 0
+        max_concurrent   = 0
         detection_method = ""
         first_detection  = None
         last_detection   = None
@@ -148,11 +144,10 @@ class MidnightResetScheduler:
 
         print(f"   📊 Snapshot {snap_date}: visitors={total_visitors}, max={max_concurrent}")
 
-        # ── 2. Simpan daily_summary ─────────────────────────────────────
+        # ── 2. Simpan daily_summary ────────────────────────────────────
         try:
-            mgr   = self._get_session_manager()
-            ssn   = mgr.get_summary() if mgr else {}
-            sc    = ssn.get('total_sessions', 0)
+            mgr = self._get_session_manager()
+            sc  = mgr.get_summary().get('total_sessions', 0) if mgr else 0
         except Exception:
             sc = 0
 
@@ -167,9 +162,8 @@ class MidnightResetScheduler:
             notes            = notes,
         )
 
-        # ── 3. Simpan wajah unik hari ini ──────────────────────────────
+        # ── 3. Simpan wajah unik ──────────────────────────────────────
         try:
-            # Gunakan face_db dari counter pertama (shared DB)
             face_db = counters[0].face_db
             faces   = face_db.get_all_faces_meta(limit=10000)
             if faces:
@@ -182,7 +176,7 @@ class MidnightResetScheduler:
         except Exception as e:
             print(f"⚠️  face log error: {e}")
 
-        # ── 4. End running sessions ─────────────────────────────────────
+        # ── 4. End running sessions ────────────────────────────────────
         try:
             mgr = self._get_session_manager()
             if mgr:
@@ -195,13 +189,17 @@ class MidnightResetScheduler:
         except Exception as e:
             print(f"⚠️  session end error: {e}")
 
-        # ── 5. Reset semua counter ──────────────────────────────────────
+        # ── 5. Reset counter via method thread-safe ────────────────────
+        # FIX: gunakan reset_daily_stats() bukan akses langsung ke sm.*
+        # Wajah di face_db TIDAK direset — tetap ada untuk anti-duplicate
         for c in counters:
             try:
                 c.reset_daily_stats()
-                print(f"   ✅ Counter reset done")
+                print(f"   ✅ Counter {getattr(c, 'label', '')} reset (stats cleared, face DB preserved)")
             except Exception as e:
                 print(f"⚠️  counter reset error: {e}")
+                # Fallback: reset manual jika method belum ada
+                self._reset_counter_fallback(c)
 
         print(f"✅ Midnight reset complete — data saved for {snap_date}")
 
@@ -211,15 +209,38 @@ class MidnightResetScheduler:
             except Exception as e:
                 print(f"⚠️  on_reset_done callback error: {e}")
 
-    # ── shutdown handler ───────────────────────────────────────────────────
+    @staticmethod
+    def _reset_counter_fallback(c):
+        """
+        Fallback jika reset_daily_stats() belum diimplementasikan di counter.
+        Diproteksi dengan lock internal stats_manager.
+        """
+        try:
+            sm = c.stats_manager
+            # Gunakan lock jika ada, kalau tidak pakai threading.Lock dummy
+            lock = getattr(sm, '_lock', threading.Lock())
+            with lock:
+                sm.max_count      = 0
+                sm.total_detected = 0
+                sm.hourly_stats.clear()
+                sm.entry_times.clear()
+            sm.save_statistics()
+
+            # Reset tracker state
+            c.trackers.clear()
+            c.current_faces = []
+            c.next_id       = 0
+            print(f"   ✅ Fallback reset done")
+        except Exception as e:
+            print(f"⚠️  fallback reset error: {e}")
+
+    # ── shutdown handler ──────────────────────────────────────────────────
 
     def _register_signals(self):
-        """Daftarkan SIGINT / SIGTERM agar snapshot tersimpan saat server mati."""
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:
                 signal.signal(sig, self._shutdown_handler)
             except (ValueError, OSError):
-                # signal hanya bisa didaftarkan dari main thread
                 pass
 
     def _shutdown_handler(self, signum, frame):
@@ -245,8 +266,8 @@ class MidnightResetScheduler:
             print("⚠️  No active counters")
             return
 
-        total_visitors = 0
-        max_concurrent = 0
+        total_visitors   = 0
+        max_concurrent   = 0
         detection_method = ""
 
         for c in counters:
@@ -256,7 +277,6 @@ class MidnightResetScheduler:
                 max_concurrent   = max(max_concurrent, stats.get('max_count', 0))
                 if not detection_method:
                     detection_method = stats.get('detection_method', '')
-                # Stop counter
                 c.stop()
             except Exception as e:
                 print(f"⚠️  shutdown stats error: {e}")
