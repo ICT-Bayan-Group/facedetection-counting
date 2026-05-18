@@ -1,16 +1,3 @@
-"""
-MidnightResetScheduler
-======================
-- Memantau waktu sistem (zona waktu WITA = UTC+8)
-- Tepat pukul 00:00:00 WITA → simpan snapshot harian → reset counter
-- Mendaftarkan signal-handler (SIGINT / SIGTERM) agar data tersimpan
-  ketika server dimatikan kapan saja
-
-FIX v2:
-- Reset counter via method reset_daily_stats() yang thread-safe
-- Tidak lagi akses sm.* langsung dari luar (race condition)
-- Tidak reset face_db — wajah dipertahankan untuk anti-duplicate lintas hari
-"""
 
 import signal
 import sys
@@ -52,6 +39,12 @@ class MidnightResetScheduler:
         self._shutdown_lock       = threading.Lock()
         self._shutdown_done       = False
 
+        # FIX #4: flag agar tidak double-reset di hari yang sama
+        # Diisi dengan string 'YYYY-MM-DD' setelah reset berhasil.
+        # Diinisialisasi dengan tanggal hari ini saat startup agar
+        # restart server tidak memicu reset ulang.
+        self._last_reset_date: str = now_wita().strftime('%Y-%m-%d')
+
     # ── lifecycle ──────────────────────────────────────────────────────────
 
     def start(self):
@@ -61,7 +54,7 @@ class MidnightResetScheduler:
         )
         self._thread.start()
         self._register_signals()
-        print("⏰ MidnightResetScheduler started (WITA timezone)")
+        print(f"⏰ MidnightResetScheduler started (WITA) | last_reset={self._last_reset_date}")
 
     def stop(self):
         self._running = False
@@ -70,26 +63,46 @@ class MidnightResetScheduler:
 
     def _loop(self):
         """
-        Tidur sampai 1 menit sebelum tengah malam,
-        lalu polling setiap detik hingga jam 00:00.
+        FIX #1 & #2:
+        - Sleep pendek (max 30 detik) saat mendekati midnight, bukan 300.
+        - Window deteksi diperlebar ke 30 detik.
+        - Guard utama adalah _last_reset_date, bukan window waktu semata.
         """
         while self._running:
             try:
                 now = now_wita()
+                today_str = now.strftime('%Y-%m-%d')
                 seconds_until_midnight = self._seconds_until_midnight(now)
 
+                # Masih jauh dari midnight → tidur pendek (max 30 detik)
+                # FIX #1: dulu sleep(min(sleep_time, 300)) = bisa 5 menit → terlewat!
                 if seconds_until_midnight > 60:
-                    sleep_time = seconds_until_midnight - 60
-                    time.sleep(min(sleep_time, 300))
+                    sleep_time = min(seconds_until_midnight - 60, 30)
+                    time.sleep(sleep_time)
                     continue
 
-                now = now_wita()
+                # Zona 60 detik sebelum/sesudah midnight
                 h, m, s = now.hour, now.minute, now.second
 
-                if h == 0 and m == 0 and s <= 5:
-                    print(f"\n🕛 MIDNIGHT RESET TRIGGERED — {now.strftime('%Y-%m-%d %H:%M:%S')} WITA")
-                    self._save_snapshot_and_reset()
-                    time.sleep(10)
+                # FIX #2 & #4: window 30 detik + guard _last_reset_date
+                if h == 0 and m == 0 and s <= 30:
+                    # Hitung tanggal yang baru saja lewat (= kemarin)
+                    snap_date = (now - timedelta(days=1)).strftime('%Y-%m-%d')
+
+                    # FIX #4: skip jika sudah reset untuk snap_date ini
+                    if self._last_reset_date == snap_date:
+                        time.sleep(10)
+                        continue
+
+                    print(f"\n🕛 MIDNIGHT RESET — {now.strftime('%Y-%m-%d %H:%M:%S')} WITA "
+                          f"| snap={snap_date}")
+                    self._save_snapshot_and_reset(snap_date=snap_date)
+
+                    # Tandai sudah reset
+                    self._last_reset_date = snap_date
+                    # Tidur 60 detik setelah reset agar tidak masuk loop lagi
+                    time.sleep(60)
+
                 else:
                     time.sleep(1)
 
@@ -106,15 +119,24 @@ class MidnightResetScheduler:
 
     # ── core: simpan snapshot lalu reset ──────────────────────────────────
 
-    def _save_snapshot_and_reset(self, notes: str = "Auto midnight reset"):
+    def _save_snapshot_and_reset(
+        self,
+        notes:     str = "Auto midnight reset",
+        snap_date: str | None = None,
+    ):
         """
         1. Kumpulkan stats dari semua counter yang aktif
         2. Simpan daily_summary ke snapshot DB
-        3. Simpan semua wajah unik hari ini ke daily_face_log
+        3. Simpan semua wajah unik ke daily_face_log
         4. End sesi yang masih Running
         5. Reset counter via reset_daily_stats() yang thread-safe
+
+        FIX #3: snap_date sekarang dikirim dari luar (_loop atau caller),
+                bukan dihitung ulang di sini → tidak ada ambiguitas.
         """
-        snap_date = (now_wita() - timedelta(days=1)).strftime('%Y-%m-%d')
+        if snap_date is None:
+            # Fallback: ambil kemarin relatif terhadap sekarang
+            snap_date = (now_wita() - timedelta(days=1)).strftime('%Y-%m-%d')
 
         counters = [c for c in self._get_counters() if c is not None]
         if not counters:
@@ -130,7 +152,7 @@ class MidnightResetScheduler:
 
         for c in counters:
             try:
-                stats = c.get_statistics()
+                stats            = c.get_statistics()
                 total_visitors  += stats.get('daily_total',  0)
                 max_concurrent   = max(max_concurrent, stats.get('max_count', 0))
                 if not detection_method:
@@ -190,15 +212,12 @@ class MidnightResetScheduler:
             print(f"⚠️  session end error: {e}")
 
         # ── 5. Reset counter via method thread-safe ────────────────────
-        # FIX: gunakan reset_daily_stats() bukan akses langsung ke sm.*
-        # Wajah di face_db TIDAK direset — tetap ada untuk anti-duplicate
         for c in counters:
             try:
                 c.reset_daily_stats()
                 print(f"   ✅ Counter {getattr(c, 'label', '')} reset (stats cleared, face DB preserved)")
             except Exception as e:
                 print(f"⚠️  counter reset error: {e}")
-                # Fallback: reset manual jika method belum ada
                 self._reset_counter_fallback(c)
 
         print(f"✅ Midnight reset complete — data saved for {snap_date}")
@@ -213,11 +232,9 @@ class MidnightResetScheduler:
     def _reset_counter_fallback(c):
         """
         Fallback jika reset_daily_stats() belum diimplementasikan di counter.
-        Diproteksi dengan lock internal stats_manager.
         """
         try:
-            sm = c.stats_manager
-            # Gunakan lock jika ada, kalau tidak pakai threading.Lock dummy
+            sm   = c.stats_manager
             lock = getattr(sm, '_lock', threading.Lock())
             with lock:
                 sm.max_count      = 0
@@ -226,7 +243,6 @@ class MidnightResetScheduler:
                 sm.entry_times.clear()
             sm.save_statistics()
 
-            # Reset tracker state
             c.trackers.clear()
             c.current_faces = []
             c.next_id       = 0
@@ -252,6 +268,7 @@ class MidnightResetScheduler:
         """
         Dipanggil ketika server dimatikan (SIGINT/SIGTERM atau manual).
         Idempoten — hanya berjalan sekali.
+        Pakai tanggal HARI INI (bukan kemarin) karena data belum direset.
         """
         with self._shutdown_lock:
             if self._shutdown_done:
