@@ -1,8 +1,9 @@
 import os
 import sqlite3
 import threading
-from datetime import datetime, date
 from typing import Optional
+
+from utils.wita_time import now_wita_iso  # TZ FIX — jangan pakai datetime.now() polos
 
 SNAPSHOT_DB_PATH = os.environ.get('SNAPSHOT_DB_PATH', 'data/daily_snapshots.db')
 
@@ -75,7 +76,7 @@ class DailySnapshotDB:
         Jika tanggal sudah ada, nilai total_visitors/max_concurrent diambil
         yang LEBIH BESAR (supaya re-save tidak menghapus data lebih besar).
         """
-        now = datetime.now().isoformat()
+        now = now_wita_iso()  # TZ FIX — sebelumnya datetime.now().isoformat() (naive)
         try:
             with self._lock:
                 with self._conn() as c:
@@ -140,8 +141,8 @@ class DailySnapshotDB:
                             """, (
                                 log_date,
                                 f.get('id', ''),
-                                f.get('first_seen', datetime.now().isoformat()),
-                                f.get('last_seen',  datetime.now().isoformat()),
+                                f.get('first_seen', now_wita_iso()),  # TZ FIX
+                                f.get('last_seen',  now_wita_iso()),  # TZ FIX
                                 f.get('detection_count', 1),
                                 camera_label,
                                 f.get('thumbnail_b64'),

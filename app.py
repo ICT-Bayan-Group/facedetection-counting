@@ -20,20 +20,13 @@ CORS(app)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TIMEZONE WITA (UTC+8)
+# TZ FIX: sekarang import dari utils/wita_time.py — single source of truth,
+# bukan didefinisikan ulang di sini. Semua module (session_manager,
+# face_counter, face_database, daily_snapshot, midnight_reset, app) pakai
+# fungsi yang sama persis, jadi tidak akan ada drift antar file walau
+# TZ setting Linux/Ubuntu server berubah.
 # ─────────────────────────────────────────────────────────────────────────────
-from datetime import datetime, timezone, timedelta
-WITA = timezone(timedelta(hours=8))
-
-def now_wita() -> datetime:
-    return datetime.now(WITA)
-
-def today_wita() -> str:
-    return now_wita().strftime('%Y-%m-%d')
-
-def seconds_until_midnight_wita() -> int:
-    now  = now_wita()
-    midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    return int((midnight - now).total_seconds())
+from utils.wita_time import now_wita, today_wita, seconds_until_midnight_wita
 
 # ─────────────────────────────────────────────────────────────────────────────
 # GLOBAL STATE
@@ -128,6 +121,18 @@ def init_snapshot_system():
             'total_visitors': total_visitors,
             'message':        f'Data {snap_date} tersimpan, counter direset',
         })
+        # BUG #3 FIX: broadcast juga sinyal counter_reset generik, dan dorong
+        # payload stats terbaru (yang sudah ter-reset) supaya semua SSE
+        # listener (dashboard + data-pengunjung) langsung sinkron ke 0
+        # tanpa nunggu polling/broadcaster 3 detik berikutnya.
+        _broadcast_sse('counter_reset', {
+            'date':    snap_date,
+            'message': 'Counter direset otomatis (midnight)',
+        })
+        try:
+            _broadcast_sse('stats', _build_stats_payload(_merged_stats()))
+        except Exception:
+            pass
 
     midnight_scheduler = MidnightResetScheduler(
         get_counters        = lambda: counters,
@@ -314,7 +319,7 @@ def _merged_stats() -> dict:
                                      + s1.get('current_count', 0))
         merged['active_trackers'] = (merged.get('active_trackers', 0)
                                      + s1.get('active_trackers', 0))
-        # FIX: daily_total juga harus dijumlah dari kedua kamera
+        # daily_total juga harus dijumlah dari kedua kamera
         merged['daily_total']     = (merged.get('daily_total', 0)
                                      + s1.get('daily_total', 0))
         merged['max_count']       = max(merged.get('max_count', 0),
@@ -431,6 +436,7 @@ def health_check():
         'detector':          c0.detector_type if c0 else 'N/A',
         'detection_enabled': detection_enabled,
         'sse_clients':       len(_sse_clients),
+        'scheduler_alive':   midnight_scheduler.is_alive() if midnight_scheduler else False,
         'wita_time':         nw.strftime('%H:%M:%S'),
         'next_reset_in':     seconds_until_midnight_wita(),
         'timestamp':         time.strftime('%Y-%m-%dT%H:%M:%S'),
@@ -631,8 +637,18 @@ def export_daily_csv(date_str: str):
 
 @app.route('/api/daily/snapshot/manual', methods=['POST'])
 def manual_snapshot():
-    if midnight_scheduler is None:
-        return jsonify({'success': False, 'message': 'Scheduler not ready'}), 503
+    """
+    BUG #1 FIX (root cause 1): sebelumnya endpoint ini cuma memanggil
+    save_daily_snapshot() tanpa mereset statistik. Sekarang lengkap:
+    save snapshot -> save face log -> close session lama -> RESET semua
+    counter -> buka session baru -> broadcast SSE (snapshot_saved +
+    counter_reset) supaya dashboard & halaman data-pengunjung langsung
+    balik ke 0 tanpa perlu refresh / restart server.
+    """
+    global current_session_active, session_start_time
+
+    if midnight_scheduler is None or snapshot_db is None:
+        return jsonify({'success': False, 'message': 'Scheduler/Snapshot DB not ready'}), 503
 
     data      = request.get_json() or {}
     today_str = today_wita()
@@ -652,14 +668,18 @@ def manual_snapshot():
         if not detection_method:
             detection_method = stats.get('detection_method', '')
 
+    notes = data.get('notes', 'Manual snapshot')
+
+    # 1. Simpan daily summary
     ok = snapshot_db.save_daily_snapshot(
         snapshot_date    = today_str,
         total_visitors   = total_visitors,
         max_concurrent   = max_concurrent,
         detection_method = detection_method,
-        notes            = data.get('notes', 'Manual snapshot'),
+        notes            = notes,
     )
 
+    # 2. Simpan daily face log
     n = 0
     try:
         face_db = counters_[0].face_db
@@ -668,13 +688,49 @@ def manual_snapshot():
     except Exception as e:
         print(f"⚠️  manual snapshot face log: {e}")
 
-    # FIX: broadcast SSE agar UI refresh otomatis setelah snapshot manual
+    # 3. Tutup sesi aktif (FR-04)
+    mgr = get_session_manager()
+    try:
+        mgr.end_session(
+            total_visitors = total_visitors,
+            max_concurrent = max_concurrent,
+            status         = 'Selesai',
+            notes          = f'{notes} (manual reset)',
+        )
+    except Exception as e:
+        print(f"⚠️  manual snapshot end_session: {e}")
+
+    # 4. RESET semua counter harian — ini yang hilang sebelumnya (root cause bug #1)
+    for c in counters_:
+        try:
+            c.reset_daily_stats()
+        except Exception as e:
+            print(f"⚠️  manual snapshot counter reset ({getattr(c,'label','?')}): {e}")
+
+    # 5. Buat sesi baru (FR-05)
+    try:
+        mgr.start_session("CCTV Hall A (2 Kamera)")
+        current_session_active = True
+        session_start_time     = time.time()
+    except Exception as e:
+        print(f"⚠️  manual snapshot start_session: {e}")
+
+    # 6. Broadcast SSE — snapshot_saved (info) + counter_reset (aksi UI reset ke 0)
+    #    plus payload stats terbaru (yang sudah 0) supaya semua client sinkron instan.
     _broadcast_sse('snapshot_saved', {
         'date':           today_str,
         'total_visitors': total_visitors,
         'max_concurrent': max_concurrent,
         'faces_logged':   n,
     })
+    _broadcast_sse('counter_reset', {
+        'date':    today_str,
+        'message': 'Counter direset setelah manual snapshot',
+    })
+    try:
+        _broadcast_sse('stats', _build_stats_payload(_merged_stats()))
+    except Exception:
+        pass
 
     return jsonify({
         'success':        ok,
@@ -736,6 +792,10 @@ def reset_stats():
     for c in counters:
         if c is not None:
             c.reset_daily_stats()
+    _broadcast_sse('counter_reset', {
+        'date':    today_wita(),
+        'message': 'Statistik direset manual dari panel kontrol',
+    })
     return jsonify({'success': True, 'message': 'Statistics reset (semua kamera)'})
 
 # ─────────────────────────────────────────────────────────────────────────────
