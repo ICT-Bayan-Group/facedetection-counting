@@ -2,8 +2,9 @@
 SessionManager — SQLite backend, API lengkap untuk endpoint publik.
 """
 import os, sqlite3, json, uuid
-from datetime import datetime
 from typing import Optional
+
+from utils.wita_time import now_wita, now_wita_iso, today_wita  # TZ FIX
 
 DB_PATH = os.environ.get('SESSION_DB_PATH', 'data/sessions.db')
 
@@ -42,7 +43,7 @@ class SessionManager:
     # ── lifecycle ─────────────────────────────────────────────────────────
     def start_session(self, camera_location='CCTV Hall A') -> dict:
         sid = str(uuid.uuid4())[:8]
-        now = datetime.now().isoformat()
+        now = now_wita_iso()  # TZ FIX — sebelumnya datetime.now().isoformat() (naive)
         self.current_session = {
             'id': sid, 'camera_location': camera_location,
             'start_time': now, 'end_time': None,
@@ -58,7 +59,7 @@ class SessionManager:
         return self.current_session
 
     def end_all_running_sessions(self, total_visitors=0, status='Interrupted', notes='') -> int:
-        now = datetime.now().isoformat()
+        now = now_wita_iso()  # TZ FIX
         with self._conn() as c:
             n = c.execute(
                 "UPDATE sessions SET end_time=?, total_visitors=?, status=?, notes=? "
@@ -73,7 +74,7 @@ class SessionManager:
     def end_session(self, total_visitors=0, max_concurrent=0,
                     status='Selesai', notes='') -> Optional[dict]:
         if not self.current_session: return None
-        now = datetime.now().isoformat()
+        now = now_wita_iso()  # TZ FIX
         sid = self.current_session['id']
         self.current_session.update({
             'end_time': now, 'total_visitors': total_visitors,
@@ -118,7 +119,7 @@ class SessionManager:
         return n > 0
 
     def get_summary(self) -> dict:
-        today = datetime.now().strftime('%Y-%m-%d')
+        today = today_wita()  # TZ FIX — sebelumnya datetime.now().strftime('%Y-%m-%d') (naive)
         with self._conn() as c:
             total    = c.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
             finished = c.execute(
@@ -174,7 +175,7 @@ class SessionManager:
                         "INSERT INTO sessions (id,camera_location,start_time,end_time,"
                         "total_visitors,max_concurrent,status,notes) VALUES (?,?,?,?,?,?,?,?)",
                         (sid, s.get('camera_location',''),
-                         s.get('start_time', datetime.now().isoformat()),
+                         s.get('start_time', now_wita_iso()),
                          s.get('end_time'), s.get('total_visitors',0),
                          s.get('max_concurrent',0), s.get('status','Selesai'),
                          s.get('notes','')))

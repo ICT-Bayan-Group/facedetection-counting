@@ -8,6 +8,8 @@ from collections import defaultdict, deque
 from datetime import datetime
 from enum import Enum
 
+from utils.wita_time import now_wita_iso  # TZ FIX — jangan pakai datetime.now() polos
+
 # ─────────────────────────────────────────────
 # OPENVINO
 # ─────────────────────────────────────────────
@@ -922,7 +924,7 @@ class OpenVINOFaceCounter:
             'processing_fps':     round(self.processing_fps, 1),
             'active_trackers':    len(self.trackers),
             'current_faces':      len(self.current_faces),
-            'timestamp':          datetime.now().isoformat(),
+            'timestamp':          now_wita_iso(),  # TZ FIX — sebelumnya datetime.now().isoformat() (naive)
             'detection_method':   self.detector_type,
             'embedding_tracking': self.use_embeddings,
             'database_size':      len(self.face_db.faces),

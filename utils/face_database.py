@@ -3,8 +3,10 @@ FaceDatabase — SQLite, real-time insert, event callbacks.
 Wajah baru langsung INSERT ke DB dan trigger callback ke Flask SSE.
 """
 import os, sqlite3, threading, json, numpy as np
-from datetime import datetime
+from datetime import timedelta
 from typing import Callable, Optional
+
+from utils.wita_time import now_wita, now_wita_iso  # TZ FIX — jangan pakai datetime.now() polos
 
 DB_PATH = os.environ.get('FACE_DB_PATH', 'data/face_database.db')
 
@@ -97,7 +99,7 @@ class FaceDatabase:
         except: return False, None, 0
 
         matched_id, similarity = self.find_matching_face(emb)
-        now = datetime.now().isoformat()
+        now = now_wita_iso()  # TZ FIX — sebelumnya datetime.now().isoformat() (naive, ikut TZ OS)
 
         with self._lock:
             with self._conn() as c:
@@ -200,8 +202,8 @@ class FaceDatabase:
 
     # ── management ────────────────────────────────────────────────────────
     def remove_old_faces(self, days=30) -> int:
-        from datetime import timedelta
-        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        # TZ FIX — sebelumnya datetime.now() - timedelta(days=days) (naive)
+        cutoff = (now_wita() - timedelta(days=days)).isoformat()
         with self._lock:
             with self._conn() as c:
                 n = c.execute("DELETE FROM faces WHERE last_seen < ?", (cutoff,)).rowcount
@@ -235,8 +237,8 @@ class FaceDatabase:
                             "INSERT INTO faces (id,embedding,first_seen,last_seen,detection_count) "
                             "VALUES (?,?,?,?,?)",
                             (fid, _emb_to_blob(norm),
-                             fd.get('first_seen', datetime.now().isoformat()),
-                             fd.get('last_seen',  datetime.now().isoformat()),
+                             fd.get('first_seen', now_wita_iso()),
+                             fd.get('last_seen',  now_wita_iso()),
                              fd.get('detection_count', 1)))
                         migrated += 1
                     except Exception as e: print(f"⚠️  Skip {fid}: {e}")
