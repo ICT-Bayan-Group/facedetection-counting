@@ -29,15 +29,16 @@
       padding: 0 20px; height: 68px;
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
     }
-    .navbar-brand { display: flex; align-items: center; gap: 12px; }
-    .navbar-logo  { height: 40px; width: auto; object-fit: contain; max-width: 140px; }
+    .navbar-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .navbar-logo  { height: 40px; width: auto; object-fit: contain; max-width: 140px; flex-shrink: 0; }
     .navbar-title {
       font-size: 1.05rem; font-weight: 700;
       background: linear-gradient(135deg, #ea580c 0%, #ca8a04 100%);
       -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      white-space: nowrap;
     }
-    .navbar-subtitle { font-size: .72rem; color: #94a3b8; margin-top: 1px; }
-    .navbar-right { display: flex; align-items: center; gap: 10px; }
+    .navbar-subtitle { font-size: .72rem; color: #94a3b8; margin-top: 1px; white-space: nowrap; }
+    .navbar-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
     .live-badge {
       display: inline-flex; align-items: center; gap: 6px;
@@ -46,6 +47,7 @@
       border-radius: 50px; font-weight: 600; font-size: .75rem; color: #fff;
       box-shadow: 0 2px 10px rgba(239,68,68,.35);
       animation: livePulse 2s ease-in-out infinite;
+      white-space: nowrap;
     }
     @keyframes livePulse { 0%,100%{box-shadow:0 2px 10px rgba(239,68,68,.35)} 50%{box-shadow:0 2px 18px rgba(239,68,68,.6)} }
     .live-dot { width: 7px; height: 7px; background: #fff; border-radius: 50%; animation: blink 1.5s infinite; }
@@ -59,6 +61,7 @@
       text-decoration: none; border: none; cursor: pointer;
       box-shadow: 0 2px 8px rgba(59,130,246,.3);
       transition: all .25s ease;
+      white-space: nowrap;
     }
     .navbar-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(59,130,246,.45); }
     .navbar-btn.secondary {
@@ -71,6 +74,68 @@
       box-shadow: 0 2px 8px rgba(16,185,129,.3);
     }
     .navbar-btn.green:hover { box-shadow: 0 4px 16px rgba(16,185,129,.45); }
+
+    /* ── NAVBAR ACTIONS GROUP (desktop: flex row biasa) ── */
+    .navbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* ── HAMBURGER (default: disembunyikan di desktop) ── */
+    .navbar-hamburger {
+      display: none;
+      align-items: center; justify-content: center;
+      width: 40px; height: 40px; flex-shrink: 0;
+      background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 10px;
+      cursor: pointer; transition: background .2s ease;
+      position: relative;
+    }
+    .navbar-hamburger:hover { background: #e2e8f0; }
+    .navbar-hamburger svg { width: 20px; height: 20px; color: #475569; }
+
+    /* ── RESPONSIVE: di bawah 768px, tombol aksi jadi dropdown hamburger ── */
+    @media (max-width: 768px) {
+      .navbar-hamburger { display: inline-flex; }
+
+      .navbar-actions {
+        display: none;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        position: absolute;
+        top: calc(100% + 10px);
+        left: 16px;
+        right: 16px;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        box-shadow: 0 12px 32px rgba(0,0,0,.14);
+        padding: 12px;
+        z-index: 60;
+      }
+      .navbar-actions.open {
+        display: flex;
+        animation: navMenuIn .18s ease;
+      }
+      .navbar-actions .navbar-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 10px 16px;
+      }
+      @keyframes navMenuIn {
+        from { opacity: 0; transform: translateY(-6px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+    }
+
+    @media (max-width: 480px) {
+      .navbar-subtitle { display: none; }
+      .navbar-title    { font-size: .9rem; }
+      .navbar-logo     { height: 32px; max-width: 100px; }
+      .live-badge span:not(.live-dot) { display: none; }
+      .live-badge { padding: 6px 8px; }
+    }
 
     /* ── CARD ── */
     .card {
@@ -221,22 +286,38 @@
         <div class="navbar-subtitle">Rekapitulasi Harian Face Counter</div>
       </div>
     </div>
+
     <div class="navbar-right">
       <div id="liveIndicator" class="live-badge hidden">
-        <span class="live-dot"></span>LIVE
+        <span class="live-dot"></span><span>LIVE</span>
       </div>
-      <button onclick="triggerManualSnapshot()" class="navbar-btn green">
-        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
-        Simpan Snapshot
+
+      <!-- Hamburger — cuma muncul di layar sempit (≤768px) -->
+      <button class="navbar-hamburger" id="navHamburger" onclick="toggleNavMenu()"
+              aria-label="Buka menu" aria-expanded="false" aria-controls="navActions">
+        <svg id="hamburgerIconOpen" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+        <svg id="hamburgerIconClose" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:none;">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
       </button>
-      <button onclick="exportTodayCSV()" class="navbar-btn">
-        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
-        Export CSV
-      </button>
-      <a href="/" class="navbar-btn secondary">
-        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>
-        Dashboard
-      </a>
+
+      <!-- Grup tombol aksi — di desktop tampil flex biasa, di mobile jadi dropdown -->
+      <div class="navbar-actions" id="navActions">
+        <button onclick="triggerManualSnapshot()" class="navbar-btn green">
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+          Simpan Snapshot
+        </button>
+        <button onclick="exportTodayCSV()" class="navbar-btn">
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+          Export CSV
+        </button>
+        <a href="/" class="navbar-btn secondary">
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>
+          Dashboard
+        </a>
+      </div>
     </div>
   </div>
 </nav>
@@ -489,6 +570,47 @@
 
   const MONTHS = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
 
+  // ── HAMBURGER MENU ────────────────────────────────────────────────────────
+  function toggleNavMenu() {
+    const menu   = document.getElementById('navActions');
+    const btn    = document.getElementById('navHamburger');
+    const iconOpen  = document.getElementById('hamburgerIconOpen');
+    const iconClose = document.getElementById('hamburgerIconClose');
+    const isOpen = menu.classList.toggle('open');
+    btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    iconOpen.style.display  = isOpen ? 'none'  : 'block';
+    iconClose.style.display = isOpen ? 'block' : 'none';
+  }
+
+  function closeNavMenu() {
+    const menu = document.getElementById('navActions');
+    if (!menu.classList.contains('open')) return;
+    menu.classList.remove('open');
+    document.getElementById('navHamburger').setAttribute('aria-expanded', 'false');
+    document.getElementById('hamburgerIconOpen').style.display  = 'block';
+    document.getElementById('hamburgerIconClose').style.display = 'none';
+  }
+
+  // Tutup menu kalau klik di luar area menu/hamburger
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('navActions');
+    const btn  = document.getElementById('navHamburger');
+    if (!menu || !btn) return;
+    if (menu.classList.contains('open') && !menu.contains(e.target) && !btn.contains(e.target)) {
+      closeNavMenu();
+    }
+  });
+
+  // Tutup menu setelah salah satu aksi di dalamnya diklik (biar nggak nutupin layar terus)
+  document.getElementById('navActions')?.addEventListener('click', (e) => {
+    if (e.target.closest('button, a')) closeNavMenu();
+  });
+
+  // Tutup menu kalau resize ke desktop (biar nggak nyangkut 'open' pas dibesarin lagi)
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 768) closeNavMenu();
+  });
+
   // ── INIT ───────────────────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
     initTrendChart();
@@ -556,6 +678,16 @@
       updateSnapshotStatus(true);
       // Reload date cards agar snapshot baru muncul
       setTimeout(loadDaily, 1000);
+    });
+
+    // counter_reset — dari manual snapshot atau reset panel kontrol; nol-in langsung
+    es.addEventListener('counter_reset', e => {
+      const d = JSON.parse(e.data);
+      set('todayVisitors', 0);
+      set('currentCount',  0);
+      set('todayMax',      0);
+      toast(d.message || 'Counter direset', 'info');
+      setTimeout(loadDaily, 1200);
     });
 
     es.addEventListener('detection_toggled', e => {

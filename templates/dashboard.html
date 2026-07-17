@@ -61,6 +61,7 @@
       border-radius: 50px; font-weight: 600; font-size: 0.75rem; color: #fff;
       box-shadow: 0 2px 10px rgba(239,68,68,0.35);
       animation: livePulse 2s ease-in-out infinite;
+      white-space: nowrap;
     }
     @keyframes livePulse { 0%,100%{box-shadow:0 2px 10px rgba(239,68,68,0.35)} 50%{box-shadow:0 2px 18px rgba(239,68,68,0.6)} }
     .live-dot { width: 7px; height: 7px; background: #fff; border-radius: 50%; animation: blink 1.5s infinite; }
@@ -90,12 +91,65 @@
     }
     .navbar-btn:hover { transform:translateY(-1px); box-shadow:0 4px 16px rgba(59,130,246,.45); background:linear-gradient(135deg,#2563eb,#1d4ed8); }
 
+    /* ── NAVBAR ACTIONS GROUP (desktop: flex row biasa) ── */
+    .navbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* ── HAMBURGER (default: disembunyikan di desktop) ── */
+    .navbar-hamburger {
+      display: none;
+      align-items: center; justify-content: center;
+      width: 40px; height: 40px; flex-shrink: 0;
+      background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 10px;
+      cursor: pointer; transition: background .2s ease;
+      position: relative;
+    }
+    .navbar-hamburger:hover { background: #e2e8f0; }
+    .navbar-hamburger svg { width: 20px; height: 20px; color: #475569; }
+
+    /* ── RESPONSIVE: di bawah 768px, tombol aksi jadi dropdown hamburger ── */
+    @media (max-width: 768px) {
+      .navbar-hamburger { display: inline-flex; }
+
+      .navbar-actions {
+        display: none;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        position: absolute;
+        top: calc(100% + 10px);
+        left: 16px;
+        right: 16px;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        box-shadow: 0 12px 32px rgba(0,0,0,.14);
+        padding: 12px;
+        z-index: 60;
+      }
+      .navbar-actions.open {
+        display: flex;
+        animation: navMenuIn .18s ease;
+      }
+      .navbar-actions .navbar-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 10px 16px;
+      }
+      @keyframes navMenuIn {
+        from { opacity: 0; transform: translateY(-6px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+    }
+
     @media(max-width:480px){
-      .navbar-subtitle,.status-label,.btn-label,.live-label{ display:none; }
+      .navbar-subtitle{ display:none; }
       .navbar-title{ font-size:.88rem; }
-      .status-pill{ padding:5px 8px; }
-      .navbar-btn{ padding:8px 10px; }
-      .live-badge{ padding:5px 8px; }
+      .live-badge span:not(.live-dot){ display:none; }
+      .live-badge{ padding:6px 8px; }
       .navbar-logo{ height:32px; max-width:100px; }
     }
 
@@ -293,13 +347,28 @@
           <span class="live-dot"></span>
           <span class="live-label">LIVE</span>
         </div>
-        <a href="/data-pengunjung" class="navbar-btn">
-          <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20" style="flex-shrink:0">
-            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
-            <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
+
+        <!-- Hamburger — cuma muncul di layar sempit (≤768px) -->
+        <button class="navbar-hamburger" id="navHamburger" onclick="toggleNavMenu()"
+                aria-label="Buka menu" aria-expanded="false" aria-controls="navActions">
+          <svg id="hamburgerIconOpen" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
           </svg>
-          <span class="btn-label">Data Pengunjung</span>
-        </a>
+          <svg id="hamburgerIconClose" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:none;">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+
+        <!-- Grup tombol aksi — di desktop tampil flex biasa, di mobile jadi dropdown -->
+        <div class="navbar-actions" id="navActions">
+          <a href="/data-pengunjung" class="navbar-btn">
+            <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20" style="flex-shrink:0">
+              <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+              <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
+            </svg>
+            <span class="btn-label">Data Pengunjung</span>
+          </a>
+        </div>
       </div>
     </div>
   </nav>
@@ -543,6 +612,47 @@
     // cache FPS per kamera dari camera_stats
     let camFPS = [0, 0];
     let camCount = [0, 0];
+
+    // ── HAMBURGER MENU ────────────────────────────────────────────────────────
+    function toggleNavMenu() {
+      const menu   = document.getElementById('navActions');
+      const btn    = document.getElementById('navHamburger');
+      const iconOpen  = document.getElementById('hamburgerIconOpen');
+      const iconClose = document.getElementById('hamburgerIconClose');
+      const isOpen = menu.classList.toggle('open');
+      btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      iconOpen.style.display  = isOpen ? 'none'  : 'block';
+      iconClose.style.display = isOpen ? 'block' : 'none';
+    }
+
+    function closeNavMenu() {
+      const menu = document.getElementById('navActions');
+      if (!menu.classList.contains('open')) return;
+      menu.classList.remove('open');
+      document.getElementById('navHamburger').setAttribute('aria-expanded', 'false');
+      document.getElementById('hamburgerIconOpen').style.display  = 'block';
+      document.getElementById('hamburgerIconClose').style.display = 'none';
+    }
+
+    // Tutup menu kalau klik di luar area menu/hamburger
+    document.addEventListener('click', (e) => {
+      const menu = document.getElementById('navActions');
+      const btn  = document.getElementById('navHamburger');
+      if (!menu || !btn) return;
+      if (menu.classList.contains('open') && !menu.contains(e.target) && !btn.contains(e.target)) {
+        closeNavMenu();
+      }
+    });
+
+    // Tutup menu setelah salah satu aksi di dalamnya diklik
+    document.getElementById('navActions')?.addEventListener('click', (e) => {
+      if (e.target.closest('button, a')) closeNavMenu();
+    });
+
+    // Tutup menu kalau resize ke desktop
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 768) closeNavMenu();
+    });
 
     document.addEventListener('DOMContentLoaded', () => {
       initCharts();
