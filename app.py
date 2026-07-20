@@ -90,7 +90,9 @@ def get_counter(cam_id: int = 0) -> OpenVINOFaceCounter:
             cam_cfg['urls'],
             cam_cfg['user'],
             cam_cfg['password'],
-            Config
+            Config,
+            cam_id=cam_id,
+            label=cam_cfg['label'],
         )
         if cam_id == 0:
             c.face_db.register_callback('new_face',     _on_new_face)
@@ -148,12 +150,65 @@ def auto_start_session():
     global detection_enabled, current_session_active, session_start_time
     if not current_session_active and detection_enabled:
         mgr = get_session_manager()
-        # Tutup semua sesi Active lama sebelum buat yang baru
-        mgr.end_all_running_sessions(
-            status='Interrupted',
-            notes='Closed on server restart'
+
+        # BUG FIX (carryover lintas-hari): kalau proses mati SEBELUM midnight
+        # reset sempat jalan (misal mati jam 23:58, nyala lagi jam 00:05),
+        # stats_manager tiap kamera akan mendeteksi ini saat load_statistics()
+        # dan menaruh sisa data itu di pending_carryover (lihat stats_manager.py)
+        # alih-alih ikut numpuk ke hitungan hari ini. Di sini kita ambil
+        # carryover itu dan simpan ke daily_snapshot dengan TANGGAL YANG BENAR
+        # (tanggal kemarin, bukan hari ini).
+        if snapshot_db is not None:
+            for c in [x for x in counters if x is not None]:
+                try:
+                    carry = c.stats_manager.pop_pending_carryover()
+                except AttributeError:
+                    carry = None
+                if carry and carry.get('total_detected', 0) > 0:
+                    snapshot_db.save_daily_snapshot(
+                        snapshot_date  = carry['date'],
+                        total_visitors = carry['total_detected'],
+                        max_concurrent = carry['max_count'],
+                        notes          = 'Auto-saved carryover (proses mati sebelum midnight reset)',
+                    )
+                    print(f"💾 Carryover {carry['date']} diselamatkan: "
+                          f"{carry['total_detected']} visitors, {carry['max_count']} max concurrent")
+
+        # BUG FIX (data hilang saat interrupted/restart):
+        # Sebelumnya, sesi lama yang berstatus 'Active' saat server mati
+        # (crash, restart, jaringan putus, redeploy) selalu ditutup dengan
+        # total_visitors=0 (nilai default parameter) — bukan angka asli —
+        # DAN datanya nggak pernah disimpan ke daily_snapshot sama sekali.
+        # Akibatnya: kalau server restart di tengah hari, semua kunjungan
+        # sebelum restart itu hilang dari laporan harian.
+        #
+        # Sekarang: ambil dulu angka aktual dari counter (stats_manager
+        # sudah reload dari disk saat OpenVINOFaceCounter di-init ulang,
+        # dan sudah bersih dari carryover hari lain berkat fix di atas),
+        # lalu catat itu ke record sesi (bukan 0) DAN simpan sebagai
+        # daily_snapshot untuk hari ini — sebelum sesi baru dibuka.
+        stats          = _merged_stats()
+        total_visitors = stats.get('daily_total', 0)
+        max_concurrent = stats.get('max_count', 0)
+
+        n_closed = mgr.end_all_running_sessions(
+            total_visitors = total_visitors,
+            max_concurrent = max_concurrent,
+            status          = 'Interrupted',
+            notes           = 'Closed on server restart'
         )
-        sess = get_session_manager().start_session("CCTV Hall A (2 Kamera)")
+
+        if n_closed > 0 and total_visitors > 0 and snapshot_db is not None:
+            snapshot_db.save_daily_snapshot(
+                snapshot_date  = today_wita(),
+                total_visitors = total_visitors,
+                max_concurrent = max_concurrent,
+                notes          = f'Auto-saved setelah restart/interrupt ({n_closed} sesi ditutup)',
+            )
+            print(f"💾 Data sesi yang ke-interrupt diselamatkan ke daily_snapshot: "
+                  f"{total_visitors} visitors, {max_concurrent} max concurrent")
+
+        sess = mgr.start_session("CCTV Hall A (2 Kamera)")
         current_session_active = True
         session_start_time = time.time()
         print(f"🚀 Auto-started session: {sess['id']}")

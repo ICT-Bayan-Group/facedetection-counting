@@ -162,12 +162,21 @@ class OpenVINOFaceCounter:
     ID_TIMEOUT        = 15.0        # box tetap tampil selama wajah ada di frame
     # ─────────────────────────────────────────────────────────────────────
 
-    def __init__(self, cctv_urls, user, password, config):
+    def __init__(self, cctv_urls, user, password, config, cam_id: int = 0, label: str = None):
         print("🔄 Initializing Surveillance-Grade OpenVINO Face Counter...")
 
         self.config        = config
+        self.cam_id         = cam_id
+        self.label          = label or f"Kamera {cam_id + 1}"
         self.video_handler = VideoStreamHandler(cctv_urls, user, password)
-        self.stats_manager = StatisticsManager()
+
+        # BUG FIX: sebelumnya StatisticsManager() dipanggil tanpa argumen
+        # untuk SEMUA kamera, jadi cam0 dan cam1 baca-tulis file statistik
+        # yang persis sama (saling menimpa). Sekarang tiap kamera dapat
+        # path unik, misal 'data/face_counter_stats_cam0.pkl' dan
+        # '..._cam1.pkl', supaya histori masing-masing kamera independen.
+        self.stats_manager = StatisticsManager(stats_file=self._build_cam_stats_path())
+
         self.face_db       = FaceDatabase()
 
         print(f"📊 Face Database: {len(self.face_db.faces)} known faces")
@@ -534,12 +543,26 @@ class OpenVINOFaceCounter:
                 self._draw_detection(frame, entry.last_box, entry)
 
     def _cleanup_loop(self):
-        """Simpan database secara periodik."""
+        """
+        Simpan database + statistik secara periodik.
+
+        PENTING: sebelumnya cuma face_db yang di-save periodik di sini;
+        stats_manager (daily_total, max_count, hourly_stats, dst) cuma
+        ke-flush ke disk pas stop() dipanggil secara GRACEFUL (SIGINT/
+        SIGTERM). Kalau proses mati paksa (SIGKILL, OOM-killer, listrik
+        mati, crash) — semua statistik hari itu hilang total karena belum
+        sempat ke-flush ke disk sama sekali.
+
+        Sekarang stats_manager ikut di-save tiap CLEANUP_INTERVAL detik
+        (default 300s), jadi kalaupun crash mendadak, yang paling banter
+        hilang cuma beberapa menit terakhir — bukan seluruh data hari itu.
+        """
         interval = getattr(self.config, 'CLEANUP_INTERVAL', 300)
         while self.is_running:
             time.sleep(interval)
             print("🧹 Periodic cleanup triggered")
             self.face_db.save_database()
+            self.stats_manager.save_statistics()
 
     # ─────────────────────────────────────────────────────────────────────
     # TRACKER UPDATE — core logic
@@ -895,6 +918,16 @@ class OpenVINOFaceCounter:
     # ─────────────────────────────────────────────────────────────────────
     # UTILITY
     # ─────────────────────────────────────────────────────────────────────
+
+    def _build_cam_stats_path(self) -> str:
+        """
+        Bikin path file statistik yang unik per kamera, diturunkan dari
+        Config.STATS_FILE dasar. Contoh:
+        'data/face_counter_stats.pkl' -> 'data/face_counter_stats_cam0.pkl'
+        """
+        base_path = getattr(self.config, 'STATS_FILE', 'data/face_counter_stats.pkl')
+        root, ext = os.path.splitext(base_path)
+        return f"{root}_cam{self.cam_id}{ext}"
 
     def _reconnect(self):
         print("⚠️  Stream lost — reconnecting...")
