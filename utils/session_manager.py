@@ -58,17 +58,18 @@ class SessionManager:
         print(f"🚀 Session started: {sid} | {camera_location}")
         return self.current_session
 
-    def end_all_running_sessions(self, total_visitors=0, status='Interrupted', notes='') -> int:
+    def end_all_running_sessions(self, total_visitors=0, max_concurrent=0,
+                                  status='Interrupted', notes='') -> int:
         now = now_wita_iso()  # TZ FIX
         with self._conn() as c:
             n = c.execute(
-                "UPDATE sessions SET end_time=?, total_visitors=?, status=?, notes=? "
+                "UPDATE sessions SET end_time=?, total_visitors=?, max_concurrent=?, status=?, notes=? "
                 "WHERE status='Active' AND end_time IS NULL",
-                (now, total_visitors, status, notes)
+                (now, total_visitors, max_concurrent, status, notes)
             ).rowcount
             c.commit()
         if n > 0:
-            print(f"⏹️  Closed {n} stale running session(s)")
+            print(f"⏹️  Closed {n} stale running session(s) | visitors={total_visitors} max_concurrent={max_concurrent}")
         return n
 
     def end_session(self, total_visitors=0, max_concurrent=0,
