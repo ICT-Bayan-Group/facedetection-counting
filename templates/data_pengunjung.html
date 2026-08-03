@@ -481,9 +481,16 @@
         <p class="section-label">Riwayat</p>
         <h2 style="font-size:1.1rem;font-weight:700;color:#1e293b;">Data Per Hari</h2>
       </div>
-      <div class="tab-bar" style="min-width:220px;">
-        <button class="tab-btn active" id="tabDaily" onclick="switchTab('daily')">Per Tanggal</button>
-        <button class="tab-btn" id="tabSessions" onclick="switchTab('sessions')">Sesi</button>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <!-- TAMBAH: Export Rekap — total pengunjung per tanggal (semua hari, atau ikut filter aktif) -->
+        <button onclick="exportSummaryCSV()" class="navbar-btn" style="font-size:.8rem;padding:8px 14px;background:linear-gradient(135deg,#8b5cf6,#7c3aed);box-shadow:0 2px 8px rgba(139,92,246,.3);">
+          <svg width="15" height="15" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+          Export Rekap
+        </button>
+        <div class="tab-bar" style="min-width:220px;">
+          <button class="tab-btn active" id="tabDaily" onclick="switchTab('daily')">Per Tanggal</button>
+          <button class="tab-btn" id="tabSessions" onclick="switchTab('sessions')">Sesi</button>
+        </div>
       </div>
     </div>
 
@@ -1045,6 +1052,20 @@ function renderSessionsTable(sessions) {
   function exportDay() {
     if (!selectedDate) return;
     window.location.href = `/api/daily/export/${selectedDate}`;
+  }
+
+  // TAMBAH: Export rekap total pengunjung per tanggal (bukan per-wajah).
+  // Kalau filter tanggal (startDate/endDate) lagi diisi, rekap ikut dibatasi
+  // ke rentang itu. Kalau kosong, export semua hari yang tercatat.
+  function exportSummaryCSV() {
+    const start = document.getElementById('startDate').value;
+    const end   = document.getElementById('endDate').value;
+    let url = '/api/daily/export-summary';
+    if (start && end) {
+      url += `?start=${start}&end=${end}`;
+    }
+    window.location.href = url;
+    toast('📥 Mengunduh rekap pengunjung per hari...', 'info');
   }
 
   async function deleteSession(id) {
