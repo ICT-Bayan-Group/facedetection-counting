@@ -690,6 +690,72 @@ def export_daily_csv(date_str: str):
     )
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# API — EXPORT REKAP HARIAN (total pengunjung per tanggal, semua hari)
+#
+# BEDA dengan /api/daily/export/<date_str> di atas:
+#   - endpoint di atas = detail per WAJAH untuk SATU tanggal
+#   - endpoint ini      = rekap TOTAL per tanggal untuk BANYAK tanggal sekaligus
+#     (format: tanggal sekian, jumlah pengunjung sekian), sesuai tampilan
+#     kartu-kartu di grid "Data Per Hari" pada halaman data-pengunjung.
+# Query param opsional: ?start=YYYY-MM-DD&end=YYYY-MM-DD untuk export rentang
+# tanggal tertentu (dipakai bareng filter di UI). Kalau kosong -> export semua.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/api/daily/export-summary')
+def export_daily_summary_csv():
+    if snapshot_db is None:
+        return jsonify({'success': False, 'message': 'Snapshot DB not ready'}), 503
+
+    start = request.args.get('start')
+    end   = request.args.get('end')
+
+    if start and end:
+        summaries = snapshot_db.get_date_range_summary(start, end)
+    else:
+        summaries = snapshot_db.get_all_daily_summaries(100000)
+
+    import csv, io
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    writer.writerow(['Rekap Pengunjung Harian — Face Counter'])
+    writer.writerow(['Periode', f'{start} s/d {end}' if (start and end) else 'Semua Data'])
+    writer.writerow(['Digenerate', now_wita().strftime('%Y-%m-%d %H:%M:%S WITA')])
+    writer.writerow([])
+
+    writer.writerow(['No', 'Tanggal', 'Total Pengunjung', 'Maks Bersamaan',
+                     'Metode Deteksi', 'Catatan'])
+
+    sorted_summaries = sorted(summaries, key=lambda s: s.get('date', ''))
+    grand_total = 0
+    for i, s in enumerate(sorted_summaries, 1):
+        grand_total += s.get('total_visitors', 0)
+        writer.writerow([
+            i,
+            s.get('date', ''),
+            s.get('total_visitors', 0),
+            s.get('max_concurrent', 0),
+            s.get('detection_method', ''),
+            s.get('notes', ''),
+        ])
+
+    writer.writerow([])
+    writer.writerow(['', 'TOTAL KESELURUHAN', grand_total, '', '', ''])
+    writer.writerow(['', 'JUMLAH HARI TERCATAT', len(sorted_summaries), '', '', ''])
+
+    if start and end:
+        filename = f"rekap-pengunjung-{start}_sd_{end}.csv"
+    else:
+        filename = f"rekap-pengunjung-semua-{today_wita()}.csv"
+
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+    )
+
+
 @app.route('/api/daily/snapshot/manual', methods=['POST'])
 def manual_snapshot():
     """
