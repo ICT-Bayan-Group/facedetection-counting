@@ -146,6 +146,10 @@ class OpenVINOFaceCounter:
     - Anti-duplicate database logic (similarity threshold 0.72)
     - Detection 640x640 (penting untuk wajah kecil di 8 meter)
     - Atomic frame slot (bukan queue) untuk latency rendah
+    - RAW DETECTION COUNTING (baru): tiap tracker baru (status DETECTED)
+      langsung dihitung + dicatat ke raw_detections table, TERPISAH dari
+      pipeline verifikasi/dedup wajah unik di bawahnya yang tetap jalan
+      seperti biasa.
     """
 
     # ─── TUNABLE CONSTANTS ───────────────────────────────────────────────
@@ -572,6 +576,16 @@ class OpenVINOFaceCounter:
         """
         Match detections ke tracker yang ada.
         Update state machine, throttle embedding, anti-duplicate DB write.
+
+        RAW DETECTION COUNTING (baru): begitu tracker BARU dibuat (artinya
+        AI baru pertama kali "melihat" objek ini, status DETECTED), langsung
+        dihitung ke stats_manager.add_raw_detection() dan dicatat ke
+        face_db.log_raw_detection() — SEBELUM verifikasi/embedding apapun.
+
+        Pipeline verifikasi asli (VERIFYING → embedding → WAJAH_BARU /
+        SUDAH_TERDETEKSI → dedup ke tabel `faces`) TIDAK diubah sama sekali,
+        tetap jalan persis seperti sebelumnya, dan berjalan independen dari
+        raw detection counting di atas.
         """
         # 1) Hapus tracker yang sudah timeout
         stale = [fid for fid, e in self.trackers.items()
@@ -619,6 +633,16 @@ class OpenVINOFaceCounter:
                 self.trackers[self.next_id] = entry
                 self.next_id += 1
 
+                # ── RAW DETECTION COUNTING (BARU) ──────────────────────
+                # Tracker baru = AI baru pertama kali mendeteksi objek ini
+                # (status masih DETECTED, belum lewat VERIFYING/embedding
+                # sama sekali). Langsung dihitung + dicatat ke DB di sini.
+                # Ini TERPISAH TOTAL dari pipeline verifikasi/dedup wajah
+                # unik yang ada di langkah (5) di bawah — pipeline itu
+                # TIDAK diubah dan tetap jalan seperti kode original.
+                self.stats_manager.add_raw_detection()
+                self.face_db.log_raw_detection(entry.face_id, self.cam_id)
+
             entry.update_position(cx, cy, now)
             entry.quality_hist.append(quality)
             entry.blur_hist.append(blur)
@@ -637,7 +661,7 @@ class OpenVINOFaceCounter:
                     entry.embedding     = emb
                     entry.last_embed_ts = now
 
-            # 5) Database logic — anti-duplicate
+            # 5) Database logic — anti-duplicate (TIDAK DIUBAH — persis seperti sebelumnya)
             if entry.status == FaceStatus.VERIFYING and entry.is_verified():
                 if self.use_embeddings and entry.embedding is not None:
                     db_id, similarity = self.face_db.find_matching_face(entry.embedding)

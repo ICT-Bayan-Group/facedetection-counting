@@ -1,6 +1,12 @@
 """
 FaceDatabase — SQLite, real-time insert, event callbacks.
 Wajah baru langsung INSERT ke DB dan trigger callback ke Flask SSE.
+
+TAMBAHAN: tabel `raw_detections` — log MENTAH tiap kali AI pertama kali
+mendeteksi objek (status DETECTED), SEBELUM verifikasi/embedding/matching.
+Ini TERPISAH total dari tabel `faces` (wajah unik yang lolos is_verified()
++ matching cosine-similarity). Tujuannya buat menjawab pertanyaan "berapa
+objek yang AI lihat hari ini", bukan "berapa orang unik".
 """
 import os, sqlite3, threading, json, numpy as np
 from datetime import timedelta
@@ -50,6 +56,21 @@ class FaceDatabase:
                 )""")
             c.execute("CREATE INDEX IF NOT EXISTS idx_fs ON faces(first_seen)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_ls ON faces(last_seen)")
+
+            # ── TABEL BARU: raw_detections ──────────────────────────────
+            # Satu baris = satu kali tracker baru dibuat (status DETECTED),
+            # sebelum ada verifikasi/embedding sama sekali. Bisa numpuk
+            # banyak baris untuk orang yang sama kalau dia keluar-masuk
+            # frame berkali-kali — memang disengaja, ini log MENTAH.
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS raw_detections (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tracker_id  TEXT NOT NULL,
+                    cam_id      INTEGER NOT NULL,
+                    detected_at TEXT NOT NULL
+                )""")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_rd_time ON raw_detections(detected_at)")
+
             c.commit()
 
     def _conn(self) -> sqlite3.Connection:
@@ -161,6 +182,62 @@ class FaceDatabase:
             "SELECT id,first_seen,last_seen,detection_count FROM faces WHERE id=?",
             (face_id,)).fetchone()
         return dict(r) if r else {'id': face_id}
+
+    # ── RAW DETECTIONS (baru) ────────────────────────────────────────────
+    def log_raw_detection(self, tracker_id, cam_id: int = 0):
+        """
+        Catat SETIAP kali AI pertama kali mendeteksi objek (status DETECTED),
+        SEBELUM verifikasi/embedding/matching sama sekali. Beda dari tabel
+        `faces` (cuma wajah unik yang lolos is_verified() + cosine-similarity
+        matching) — ini log mentah semua deteksi awal dari model, buat
+        menjawab pertanyaan "berapa objek yang AI lihat", bukan "berapa
+        orang unik". Dipanggil sekali per tracker baru (bukan per frame).
+        """
+        now = now_wita_iso()
+        with self._lock:
+            with self._conn() as c:
+                c.execute(
+                    "INSERT INTO raw_detections (tracker_id, cam_id, detected_at) VALUES (?,?,?)",
+                    (str(tracker_id), cam_id, now))
+                c.commit()
+
+    def get_raw_detection_count(self, date_str: str = None) -> int:
+        """
+        Total raw detection dari tabel raw_detections.
+        Kalau date_str diisi (format 'YYYY-MM-DD'), difilter cuma tanggal itu
+        (berdasarkan prefix ISO timestamp WITA). Kalau None, total semua.
+        """
+        with self._conn() as c:
+            if date_str:
+                return c.execute(
+                    "SELECT COUNT(*) FROM raw_detections WHERE detected_at LIKE ?",
+                    (f"{date_str}%",)).fetchone()[0]
+            return c.execute("SELECT COUNT(*) FROM raw_detections").fetchone()[0]
+
+    def get_raw_detections_for_date(self, date_str: str, limit: int = 100000) -> list:
+        """Detail baris raw_detections untuk satu tanggal (buat export/inspeksi kalau perlu)."""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT tracker_id, cam_id, detected_at FROM raw_detections "
+                "WHERE detected_at LIKE ? ORDER BY detected_at ASC LIMIT ?",
+                (f"{date_str}%", limit)).fetchall()
+        return [dict(r) for r in rows]
+
+    def prune_raw_detections(self, days: int = 30) -> int:
+        """
+        Opsional: raw_detections bisa numpuk BANYAK baris (tiap tracker baru
+        per orang, tiap kemunculan). Panggil ini secara periodik (misal dari
+        cleanup loop) kalau mau buang baris yang lebih tua dari N hari, biar
+        file DB nggak membengkak terus. TIDAK dipanggil otomatis — opsional.
+        """
+        cutoff = (now_wita() - timedelta(days=days)).isoformat()
+        with self._lock:
+            with self._conn() as c:
+                n = c.execute(
+                    "DELETE FROM raw_detections WHERE detected_at < ?", (cutoff,)).rowcount
+                c.commit()
+        if n: print(f"🗑️  Pruned {n} old raw_detections rows")
+        return n
 
     # ── public read ───────────────────────────────────────────────────────
     def get_all_faces_meta(self, limit=1000) -> list:

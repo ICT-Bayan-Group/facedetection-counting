@@ -42,7 +42,7 @@ class Config:
     # ========================================
     # KAMERA 1 — IP utama lama
     # ========================================
-    CCTV_IP   = "10.2.22.30"
+    CCTV_IP   = "192.168.20.3"
     CCTV_USER = "admin"
     CCTV_PASS = "ictb4y4n"
 
@@ -55,7 +55,7 @@ class Config:
     # ========================================
     # KAMERA 2 — IP tambahan baru
     # ========================================
-    CCTV_IP_2   = "10.2.22.20"
+    CCTV_IP_2   = "192.168.20.2"
     CCTV_USER_2 = "admin"
     CCTV_PASS_2 = "ictb4y4n"
 
