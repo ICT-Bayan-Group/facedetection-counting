@@ -377,8 +377,8 @@ class OpenVINOFaceCounter:
         Selalu overwrite slot dengan frame terbaru — tidak ada queue blocking.
         """
         interval = 1.0 / getattr(self.config, 'STREAM_FPS', 25)
-        W = getattr(self.config, 'FRAME_WIDTH',  960)
-        H = getattr(self.config, 'FRAME_HEIGHT', 540)
+        W = getattr(self.config, 'FRAME_WIDTH',  1080)
+        H = getattr(self.config, 'FRAME_HEIGHT', 608)
 
         while self.is_running:
             t0 = time.time()
@@ -418,8 +418,8 @@ class OpenVINOFaceCounter:
         """
         detect_interval = 1.0 / self.DETECTION_FPS
         DW, DH          = self.DETECTION_SIZE
-        FW = getattr(self.config, 'FRAME_WIDTH',  960)
-        FH = getattr(self.config, 'FRAME_HEIGHT', 540)
+        FW = getattr(self.config, 'FRAME_WIDTH',  1080)
+        FH = getattr(self.config, 'FRAME_HEIGHT', 608)
         scale_x = FW / DW
         scale_y = FH / DH
 
@@ -938,8 +938,8 @@ class OpenVINOFaceCounter:
 
     def get_frame(self) -> np.ndarray:
         if self.frame is None:
-            W = getattr(self.config, 'FRAME_WIDTH',  960)
-            H = getattr(self.config, 'FRAME_HEIGHT', 540)
+            W = getattr(self.config, 'FRAME_WIDTH',  1080)
+            H = getattr(self.config, 'FRAME_HEIGHT', 608)
             return np.zeros((H, W, 3), dtype=np.uint8)
         return self.frame.copy()
 
