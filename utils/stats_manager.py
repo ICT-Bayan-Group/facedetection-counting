@@ -15,7 +15,17 @@ class StatisticsManager:
     def __init__(self, stats_file: str = None):
         self.people_count = 0  # Current faces in frame
         self.max_count = 0
-        self.total_detected = 0  # Total unique faces
+        self.total_detected = 0  # Total unique faces (WAJAH_BARU yang lolos verifikasi)
+
+        # ── BARU: total_raw_detections ──────────────────────────────────
+        # Counter MENTAH — naik tiap kali AI pertama kali mendeteksi objek
+        # (status DETECTED, tracker baru dibuat), SEBELUM verifikasi/
+        # embedding/matching. Beda dari total_detected yang cuma naik
+        # setelah lolos is_verified() + anti-duplicate check. Satu orang
+        # yang keluar-masuk frame berkali-kali akan menaikkan angka ini
+        # berkali-kali — memang disengaja, ini "berapa objek yang AI lihat".
+        self.total_raw_detections = 0
+
         self.hourly_stats = defaultdict(int)
         self.daily_history = []
         self.entry_times = []
@@ -61,9 +71,18 @@ class StatisticsManager:
             )
 
     def add_unique_person(self):
-        """Increment unique face counter"""
+        """Increment unique face counter (WAJAH_BARU — sudah lolos verifikasi + dedup)"""
         self.total_detected += 1
         self.entry_times.append(now_wita())  # TZ FIX
+
+    def add_raw_detection(self):
+        """
+        BARU — Increment tiap kali AI mendeteksi objek baru (tracker baru
+        dibuat, status DETECTED). Ini dipanggil SEBELUM verifikasi,
+        SEBELUM embedding, SEBELUM masuk face database unik. Dipakai buat
+        stat card "Terdeteksi Manusia" di dashboard (angka mentah, real-time).
+        """
+        self.total_raw_detections += 1
 
     def get_stats(self):
         """Get current statistics"""
@@ -71,6 +90,7 @@ class StatisticsManager:
             'current_count': self.people_count,
             'max_count': self.max_count,
             'daily_total': self.total_detected,
+            'raw_detections': self.total_raw_detections,   # ← BARU
             'hourly_stats': dict(self.hourly_stats)
         }
 
@@ -107,17 +127,19 @@ class StatisticsManager:
         # Simpan ke histori lokal sebelum reset — pakai self.date (tanggal
         # yang baru saja "berakhir"), bukan today_wita() (yang mungkin
         # sudah hari baru di titik ini).
-        if self.total_detected > 0:
+        if self.total_detected > 0 or self.total_raw_detections > 0:
             self.daily_history.append({
-                'date':   self.date,
-                'total':  self.total_detected,
-                'max':    self.max_count,
-                'hourly': dict(self.hourly_stats)
+                'date':           self.date,
+                'total':          self.total_detected,
+                'max':            self.max_count,
+                'raw_detections': self.total_raw_detections,  # ← BARU
+                'hourly':         dict(self.hourly_stats)
             })
 
         self.max_count = 0
         self.hourly_stats.clear()
         self.total_detected = 0
+        self.total_raw_detections = 0  # ← BARU — reset bareng total_detected tiap midnight
         self.entry_times.clear()
         self.date = today_wita()  # TZ FIX — mulai "hari baru" resmi dari sini
 
@@ -137,13 +159,14 @@ class StatisticsManager:
         kondisi file target dalam keadaan "setengah nulis".
         """
         data = {
-            'date':           self.date,  # TZ FIX — buat deteksi carryover pas load
-            'max_count':      self.max_count,
-            'hourly_stats':   dict(self.hourly_stats),
-            'total_detected': self.total_detected,
-            'daily_history':  self.daily_history,
-            'entry_times':    [t.isoformat() for t in self.entry_times],
-            'last_update':    now_wita_iso(),  # TZ FIX
+            'date':                 self.date,  # TZ FIX — buat deteksi carryover pas load
+            'max_count':            self.max_count,
+            'hourly_stats':         dict(self.hourly_stats),
+            'total_detected':       self.total_detected,
+            'total_raw_detections': self.total_raw_detections,  # ← BARU
+            'daily_history':        self.daily_history,
+            'entry_times':          [t.isoformat() for t in self.entry_times],
+            'last_update':          now_wita_iso(),  # TZ FIX
         }
 
         os.makedirs(os.path.dirname(self.stats_file), exist_ok=True)
@@ -182,6 +205,9 @@ class StatisticsManager:
         dipasang), diperlakukan sebagai data hari ini juga — supaya proses
         upgrade nggak tiba-tiba membuang data yang sah cuma karena field
         barunya belum ada.
+
+        total_raw_detections juga backward-compat: file lama (sebelum fitur
+        raw detection ditambahkan) nggak punya field ini — default ke 0.
         """
         try:
             if os.path.exists(self.stats_file):
@@ -191,24 +217,27 @@ class StatisticsManager:
                 saved_date = data.get('date', today_wita())  # backward-compat default
                 today      = today_wita()
 
-                loaded_total_detected = data.get('total_detected', 0)
-                loaded_max_count      = data.get('max_count', 0)
-                loaded_hourly_stats   = data.get('hourly_stats', {})
+                loaded_total_detected      = data.get('total_detected', 0)
+                loaded_max_count           = data.get('max_count', 0)
+                loaded_hourly_stats        = data.get('hourly_stats', {})
+                loaded_raw_detections      = data.get('total_raw_detections', 0)  # ← BARU, backward-compat default 0
 
                 if saved_date == today:
                     # Data memang milik hari ini — restore normal.
-                    self.date            = today
-                    self.max_count       = loaded_max_count
-                    self.hourly_stats    = defaultdict(int, loaded_hourly_stats)
-                    self.total_detected  = loaded_total_detected
-                    self.daily_history   = data.get('daily_history', [])
+                    self.date                 = today
+                    self.max_count            = loaded_max_count
+                    self.hourly_stats         = defaultdict(int, loaded_hourly_stats)
+                    self.total_detected       = loaded_total_detected
+                    self.total_raw_detections = loaded_raw_detections  # ← BARU
+                    self.daily_history        = data.get('daily_history', [])
 
                     entry_times_iso = data.get('entry_times', [])
                     self.entry_times = [
                         datetime_fromisoformat_safe(t) for t in entry_times_iso
                     ]
 
-                    print(f"✅ Statistics loaded - {self.total_detected} unique faces recorded ({today})")
+                    print(f"✅ Statistics loaded - {self.total_detected} unique faces, "
+                          f"{self.total_raw_detections} raw detections recorded ({today})")
 
                 else:
                     # Data ini milik hari SEBELUMNYA (proses mati sebelum
@@ -223,11 +252,12 @@ class StatisticsManager:
                     self.daily_history = data.get('daily_history', [])
 
                     # Mulai hari ini bersih dari 0.
-                    self.date           = today
-                    self.max_count      = 0
-                    self.hourly_stats   = defaultdict(int)
-                    self.total_detected = 0
-                    self.entry_times    = []
+                    self.date                 = today
+                    self.max_count            = 0
+                    self.hourly_stats         = defaultdict(int)
+                    self.total_detected       = 0
+                    self.total_raw_detections = 0  # ← BARU
+                    self.entry_times          = []
 
                     print(f"⚠️  Statistics file berisi data tanggal {saved_date}, "
                           f"tapi hari ini {today} — carryover disimpan terpisah "
