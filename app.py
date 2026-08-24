@@ -379,6 +379,8 @@ def _merged_stats() -> dict:
                                      + s1.get('daily_total', 0))
         merged['max_count']       = max(merged.get('max_count', 0),
                                         s1.get('max_count', 0))
+        merged['raw_detections']  = (merged.get('raw_detections', 0)
+                                 + s1.get('raw_detections', 0))
         merged['fps']             = round(
             (merged.get('fps', 0) + s1.get('fps', 0)) / 2, 1)
         merged['processing_fps']  = round(
@@ -433,6 +435,7 @@ def _build_stats_payload(stats: dict) -> dict:
         'daily_total':       stats.get('daily_total', 0),        # total unik hari ini
         'max_count':         stats.get('max_count', 0),          # maks bersamaan hari ini
         'database_faces':    stats.get('database_size', 0),      # total wajah di DB
+        'raw_detections':    stats.get('raw_detections', 0),     # total objek AI terdeteksi (mentah)
         # ── Performa ───────────────────────────────────────────────────
         'fps':               stats.get('fps', 0),
         'processing_fps':    stats.get('processing_fps', 0),
