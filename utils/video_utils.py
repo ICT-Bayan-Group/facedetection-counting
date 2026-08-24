@@ -58,8 +58,8 @@ class VideoStreamHandler:
                 
                 # Try to set resolution (optional, let camera decide if fails)
                 try:
-                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)
-                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)
+                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1080)
+                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 608)
                 except:
                     pass
                 
@@ -153,8 +153,8 @@ class VideoStreamHandler:
             cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
             
             # Optimized resolution
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1080)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 608)
             
         except Exception as e:
             print(f"⚠️  Warning: Could not apply all optimizations: {e}")
@@ -237,7 +237,7 @@ class VideoStreamHandler:
             print("\n❌ No working URLs found")
             return None
     
-    def create_demo_stream(self, width=960, height=540, fps=50):
+    def create_demo_stream(self, width=1080, height=608, fps=50):
         """Create a demo video stream at 50 FPS"""
         import numpy as np
         

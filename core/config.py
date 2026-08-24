@@ -31,8 +31,8 @@ class Config:
     # ========================================
     # RESOLUSI
     # ========================================
-    FRAME_WIDTH  = 960
-    FRAME_HEIGHT = 540
+    FRAME_WIDTH  = 1080
+    FRAME_HEIGHT = 608
 
     DETECTION_WIDTH  = 640
     DETECTION_HEIGHT = 640
