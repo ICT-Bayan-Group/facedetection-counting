@@ -420,14 +420,19 @@
       </div>
 
       <div class="stat-card">
-        <div class="icon-wrap mb-3" style="background:#fff7ed;">
-          <svg width="22" height="22" fill="#f97316" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clip-rule="evenodd"/>
+        <div class="icon-wrap mb-3" style="background:#fff1f2;">
+          <svg width="22" height="22" fill="#f43f5e" viewBox="0 0 20 20">
+            <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
           </svg>
         </div>
-        <p class="section-label">Terdeteksi Wajah Manusia</p>
-        <p class="stat-number" id="databaseFaces">0</p>
-        <p style="font-size:.75rem;color:#94a3b8;margin-top:6px;">Wajah unik tersimpan di database</p>
+        <p class="section-label">Terdeteksi Manusia</p>
+        <p class="stat-number" id="rawDetections">0</p>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+          <p style="font-size:.75rem;color:#94a3b8;">Hari ini</p>
+          <p style="font-size:.75rem;color:#94a3b8;">
+            Total: <span id="rawDetectionsTotal" style="font-weight:700;color:#f43f5e;font-family:'JetBrains Mono',monospace;">0</span>
+          </p>
+        </div>
       </div>
 
       <div class="stat-card">
@@ -717,6 +722,7 @@
         // sebelum verifikasi/embedding). Naik tiap ada tracker baru,
         // reset tiap midnight WITA bareng counter lainnya.
         set('rawDetections', data.raw_detections || 0);
+        set('rawDetectionsTotal', data.total_raw_detections || 0);   // ← BARU
 
         // Per-camera stats
         const cs = data.camera_stats || [];

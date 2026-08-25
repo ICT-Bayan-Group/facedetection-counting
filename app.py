@@ -402,24 +402,16 @@ def _merged_stats() -> dict:
 
     return merged
 
-
 def _build_stats_payload(stats: dict) -> dict:
-    """
-    Bangun payload lengkap untuk /api/stats dan SSE broadcast.
-    Satu sumber kebenaran — tidak ada duplikasi field.
-    """
     nw = now_wita()
     today = nw.strftime('%Y-%m-%d')
 
-    # Hitung snapshot sudah disimpan hari ini?
     snapshot_saved_today = False
     if snapshot_db:
         snapshot_saved_today = snapshot_db.get_summary_for_date(today) is not None
 
-    # Uptime sesi aktif
     uptime = int(time.time() - session_start_time) if session_start_time else 0
 
-    # Stream health per kamera
     stream_health = []
     for i, c in enumerate(counters):
         stream_health.append({
@@ -429,28 +421,31 @@ def _build_stats_payload(stats: dict) -> dict:
             'fps':        round(c.fps, 1) if c else 0,
         })
 
+    # ── Total keseluruhan (all-time, tidak ikut ke-reset harian) ────────
+    total_raw_detections = 0
+    if counters[0] is not None:
+        try:
+            total_raw_detections = counters[0].face_db.get_raw_detection_count()
+        except Exception as e:
+            print(f"⚠️  get_raw_detection_count error: {e}")
+
     return {
-        # ── Counter utama ──────────────────────────────────────────────
-        'current_count':     stats.get('current_count', 0),     # sedang di frame
-        'daily_total':       stats.get('daily_total', 0),        # total unik hari ini
-        'max_count':         stats.get('max_count', 0),          # maks bersamaan hari ini
-        'database_faces':    stats.get('database_size', 0),      # total wajah di DB
-        'raw_detections':    stats.get('raw_detections', 0),     # total objek AI terdeteksi (mentah)
-        # ── Performa ───────────────────────────────────────────────────
+        'current_count':     stats.get('current_count', 0),
+        'daily_total':       stats.get('daily_total', 0),
+        'max_count':         stats.get('max_count', 0),
+        'database_faces':    stats.get('database_size', 0),
+        'raw_detections':    stats.get('raw_detections', 0),
+        'total_raw_detections': total_raw_detections,   # ← BARU: all-time, semua kamera
         'fps':               stats.get('fps', 0),
         'processing_fps':    stats.get('processing_fps', 0),
         'active_ids':        stats.get('active_trackers', 0),
-        # ── Status ─────────────────────────────────────────────────────
         'detection_enabled': detection_enabled,
         'session_active':    current_session_active,
         'session_uptime':    uptime,
-        # ── Waktu WITA ─────────────────────────────────────────────────
         'today_date':        today,
         'wita_time':         nw.strftime('%H:%M:%S'),
-        'next_reset_in':     seconds_until_midnight_wita(),      # detik sampai 00:00 WITA
-        # ── Snapshot ───────────────────────────────────────────────────
+        'next_reset_in':     seconds_until_midnight_wita(),
         'snapshot_saved_today': snapshot_saved_today,
-        # ── Per kamera ─────────────────────────────────────────────────
         'camera_stats':      stats.get('camera_stats', []),
         'stream_health':     stream_health,
     }
