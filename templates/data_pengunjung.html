@@ -326,7 +326,7 @@
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
   <!-- ── STAT CARDS ── -->
-  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4">
 
     <div class="stat-card">
       <div class="icon-wrap mb-2" style="background:#eff6ff;">
@@ -366,6 +366,22 @@
       </div>
       <p class="section-label">Data Tersimpan DB</p>
       <p class="stat-number" id="dbFaces">0</p>
+    </div>
+
+    <div class="stat-card">
+      <div class="icon-wrap mb-2" style="background:#fff1f2;">
+        <svg width="20" height="20" fill="#f43f5e" viewBox="0 0 20 20">
+          <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
+        </svg>
+      </div>
+      <p class="section-label">Terdeteksi Manusia</p>
+      <p class="stat-number" id="rawDetections">0</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+        <p style="font-size:.75rem;color:#94a3b8;">Hari ini</p>
+        <p style="font-size:.75rem;color:#94a3b8;">
+          Total: <span id="rawDetectionsTotal" style="font-weight:700;color:#f43f5e;font-family:'JetBrains Mono',monospace;">0</span>
+        </p>
+      </div>
     </div>
 
     <div class="stat-card">
@@ -640,6 +656,8 @@
       // FIX: max_count dari SSE (sudah ada di payload sekarang)
       set('todayMax',      d.max_count     ?? 0);
       set('dbFaces',       d.database_faces ?? 0);
+      set('rawDetections', d.raw_detections ?? 0);
+      set('rawDetectionsTotal', d.total_raw_detections ?? 0);
       setTime('lastUpdate');
 
       // Countdown dari server (sinkron dengan WITA)
@@ -786,7 +804,9 @@
       _liveTotal = d.daily_total || 0;
       set('currentCount',  d.current_count  || 0);   // sedang di frame
       set('todayMax',      d.max_count      || 0);   // maks bersamaan
-      set('dbFaces',       d.database_faces || 0);
+      set('dbFaces', d.database_faces || 0);
+      set('rawDetections', d.raw_detections || 0);
+      set('rawDetectionsTotal', d.total_raw_detections || 0);
       setTime('lastUpdate');
 
       // Countdown — sinkron dari server
