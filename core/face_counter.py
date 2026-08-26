@@ -35,7 +35,7 @@ except ImportError:
     print("⚠️  FaceNet not available, position-based tracking only")
 
 # ─────────────────────────────────────────────
-# SCIPY (Hungarian algorithm) — PATCH BARU
+# SCIPY (Hungarian algorithm)
 # ─────────────────────────────────────────────
 try:
     from scipy.optimize import linear_sum_assignment
@@ -100,13 +100,6 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 class TrackerEntry:
     """Menyimpan state satu wajah yang sedang dilacak."""
 
-    # PATCH: 10 -> 4. Di DETECTION_FPS=5, threshold lama (10) butuh wajah
-    # ke-track terus-menerus selama 2 detik penuh dengan ID yang sama
-    # sebelum boleh lolos verifikasi. Orang jalan normal di CCTV biasanya
-    # cuma "kelihatan jelas" 0.8–1.5 detik sebelum keluar frame/berpapasan
-    # dengan orang lain, jadi threshold lama nyaring habis mayoritas orang
-    # yang lewat — apalagi pas rame (5-10 orang bareng), makin dikit yang
-    # sempat nyampe 10 frame utuh tanpa ID-nya ketuker.
     VERIFY_FRAME_THRESHOLD = 4  # frame minimum sebelum status berubah dari VERIFYING
 
     def __init__(self, face_id: int, cx: int, cy: int, ts: float):
@@ -141,17 +134,7 @@ class TrackerEntry:
         return float(np.mean(self.blur_hist)) if self.blur_hist else 0.0
 
     def is_verified(self) -> bool:
-        """
-        Wajah dianggap layak diverifikasi ke database.
-
-        PATCH: syarat avg_blur() diturunkan dari 80 -> 40. Sebelumnya ada
-        gap aneh: syarat MASUK jadi kandidat cuma butuh blur > BLUR_THRESH
-        (30), tapi syarat LOLOS verifikasi butuh rata-rata blur > 80 —
-        2.6x lebih ketat. Orang jalan pasti ada motion blur, jadi rata-rata
-        blur score-nya jarang nembus 80 walau kualitas gambarnya sebenarnya
-        cukup buat dikenali. Sekarang diselaraskan (40 = sedikit di atas
-        syarat masuk, bukan jauh di atasnya).
-        """
+        """Wajah dianggap layak diverifikasi ke database."""
         return (
             self.frame_count >= self.VERIFY_FRAME_THRESHOLD
             and self.avg_quality() > 0.60
@@ -167,9 +150,9 @@ class OpenVINOFaceCounter:
 
 
     # ─── TUNABLE CONSTANTS ───────────────────────────────────────────────
-    DETECTION_FPS     = 5           # OpenVINO inference rate (dinaikkan dari 3)
+    DETECTION_FPS     = 5           # OpenVINO inference rate
     TRACK_FPS         = 20          # render/tracking rate
-    DETECTION_SIZE    = (640, 640)  # JANGAN turunkan untuk CCTV jarak jauh
+    DETECTION_SIZE    = (640, 640)  # fallback size untuk Haar (OpenVINO pakai ov_w/ov_h asli)
     CONFIDENCE_THRESH = 0.55        # lebih rendah agar wajah jauh/miring tetap lolos
     QUALITY_THRESH    = 0.30        # longgar, kualitas dinilai dari blur saja di CCTV
     BLUR_THRESH       = 30          # CCTV jauh blur wajar, jangan terlalu ketat
@@ -178,6 +161,8 @@ class OpenVINOFaceCounter:
     EMBED_SIM_THRESH  = 0.72        # cosine similarity untuk pencocokan DB
     MAX_POSITION_DIST = 180         # lebih besar untuk kompensasi gerakan cepat
     ID_TIMEOUT        = 15.0        # box tetap tampil selama wajah ada di frame
+    CROWD_FACE_COUNT  = 4           # >= segini di satu frame dianggap crowd -> relax frontal check
+    STALL_TIMEOUT     = 8.0         # detik tanpa frame baru sebelum watchdog paksa reconnect
     # ─────────────────────────────────────────────────────────────────────
 
     def __init__(self, cctv_urls, user, password, config, cam_id: int = 0, label: str = None):
@@ -186,15 +171,12 @@ class OpenVINOFaceCounter:
         self.config        = config
         self.cam_id         = cam_id
         self.label          = label or f"Kamera {cam_id + 1}"
-        self.video_handler = VideoStreamHandler(cctv_urls, user, password)
+        self.video_handler = VideoStreamHandler(
+            cctv_urls, user, password,
+            target_fps=getattr(self.config, 'STREAM_FPS', 25)
+        )
 
-        # BUG FIX: sebelumnya StatisticsManager() dipanggil tanpa argumen
-        # untuk SEMUA kamera, jadi cam0 dan cam1 baca-tulis file statistik
-        # yang persis sama (saling menimpa). Sekarang tiap kamera dapat
-        # path unik, misal 'data/face_counter_stats_cam0.pkl' dan
-        # '..._cam1.pkl', supaya histori masing-masing kamera independen.
         self.stats_manager = StatisticsManager(stats_file=self._build_cam_stats_path())
-
         self.face_db       = FaceDatabase()
 
         print(f"📊 Face Database: {len(self.face_db.faces)} known faces")
@@ -237,6 +219,7 @@ class OpenVINOFaceCounter:
         self._latest_result = None  # (frame, faces, ts) terbaru dari detection
         self._frame_lock    = threading.Lock()
         self._result_lock   = threading.Lock()
+        self._cap_lock       = threading.Lock()  # PATCH: guard akses self.cap dari capture & watchdog
 
         # Tracker state
         self.trackers: dict    = {}
@@ -254,6 +237,9 @@ class OpenVINOFaceCounter:
         self.last_detect_ts = 0.0
         self.current_faces  = []
 
+        # PATCH: dipantau watchdog — kapan terakhir kali frame BARU (bukan retry) berhasil diambil
+        self._last_capture_success_ts = time.time()
+
         self.stats_manager.load_statistics()
         config.init_directories()
 
@@ -262,8 +248,9 @@ class OpenVINOFaceCounter:
         print(f"   Detection Size: {self.DETECTION_SIZE[0]}x{self.DETECTION_SIZE[1]}")
         print(f"   Embeddings    : {'ON' if self.use_embeddings else 'OFF'}")
         print(f"   Blur Filter   : ON (threshold={self.BLUR_THRESH})")
-        print(f"   Frontal Only  : ON")
+        print(f"   Frontal Only  : ON (relaxed saat >= {self.CROWD_FACE_COUNT} wajah/frame)")
         print(f"   Matching      : {'Hungarian (optimal)' if HUNGARIAN_AVAILABLE else 'Greedy (fallback)'}")
+        print(f"   Watchdog      : ON (stall timeout={self.STALL_TIMEOUT}s)")
 
     # ─────────────────────────────────────────────────────────────────────
     # INITIALIZERS
@@ -368,10 +355,12 @@ class OpenVINOFaceCounter:
             return
         self.cap        = self.video_handler.connect()
         self.is_running = True
+        self._last_capture_success_ts = time.time()
 
         threading.Thread(target=self._capture_loop,   daemon=True, name="Capture").start()
         threading.Thread(target=self._detection_loop, daemon=True, name="Detection").start()
         threading.Thread(target=self._render_loop,    daemon=True, name="Render").start()
+        threading.Thread(target=self._watchdog_loop,  daemon=True, name="Watchdog").start()
 
         if getattr(self.config, 'ENABLE_AUTO_CLEANUP', True):
             threading.Thread(target=self._cleanup_loop, daemon=True, name="Cleanup").start()
@@ -402,15 +391,18 @@ class OpenVINOFaceCounter:
         while self.is_running:
             t0 = time.time()
             try:
-                if self.cap is None:
+                with self._cap_lock:
+                    cap = self.cap
+
+                if cap is None:
                     time.sleep(0.05)
                     continue
 
                 # Flush buffer — buang frame lama, ambil yang paling baru
                 for _ in range(3):
-                    self.cap.grab()
+                    cap.grab()
 
-                ret, frame = self.cap.retrieve()
+                ret, frame = cap.retrieve()
                 if not ret or frame is None or frame.size == 0:
                     self._reconnect()
                     continue
@@ -421,6 +413,9 @@ class OpenVINOFaceCounter:
                 with self._frame_lock:
                     self._latest_frame = frame
 
+                # PATCH: tandai sukses — ini yang dipantau watchdog
+                self._last_capture_success_ts = time.time()
+
             except Exception as e:
                 print(f"❌ Capture: {e}")
                 time.sleep(0.5)
@@ -430,17 +425,48 @@ class OpenVINOFaceCounter:
             if sleep_t > 0:
                 time.sleep(sleep_t)
 
+    def _watchdog_loop(self):
+        """
+        PATCH BARU — jaring pengaman kedua di luar stimeout FFmpeg.
+
+        stimeout di FFmpeg options harusnya bikin cap.grab()/retrieve()
+        gagal (return False) kalau socket macet > 5 detik, tapi di
+        praktiknya beberapa build OpenCV/FFmpeg gak selalu menghormati
+        opsi itu dengan konsisten (tergantung backend & versi). Watchdog
+        ini independen: kalau gak ada frame BARU yang berhasil diambil
+        selama STALL_TIMEOUT detik, paksa release() + reconnect() dari
+        thread terpisah — release() dari thread lain biasanya cukup untuk
+        "membangunkan" panggilan blocking di capture thread.
+        """
+        check_interval = 2.0
+        while self.is_running:
+            time.sleep(check_interval)
+            stale_for = time.time() - self._last_capture_success_ts
+            if stale_for > self.STALL_TIMEOUT:
+                print(f"🐶 Watchdog: gak ada frame baru selama {stale_for:.1f}s — paksa reconnect")
+                self._reconnect()
+                self._last_capture_success_ts = time.time()
+
     def _detection_loop(self):
         """
-        Jalankan OpenVINO inference pada frame terbaru.
+        Jalankan inference pada frame terbaru.
         Throttle ke DETECTION_FPS agar CPU tidak penuh.
+
+        PATCH: pakai letterbox resize (jaga rasio aspek + padding) langsung
+        ke ukuran input model, bukan stretch paksa ke 640x640 lalu resize
+        lagi. Distorsi rasio aspek numpuk sebelumnya bikin wajah di pinggir
+        frame jadi gepeng — makin parah buat wajah kecil/miring pas crowd.
         """
         detect_interval = 1.0 / self.DETECTION_FPS
-        DW, DH          = self.DETECTION_SIZE
         FW = getattr(self.config, 'FRAME_WIDTH',  1080)
         FH = getattr(self.config, 'FRAME_HEIGHT', 608)
-        scale_x = FW / DW
-        scale_y = FH / DH
+
+        # Target ukuran deteksi: kalau OpenVINO, langsung pakai ukuran input
+        # model asli (skip resize dua kali). Kalau Haar, pakai DETECTION_SIZE.
+        if self.use_openvino and self.ov_w and self.ov_h:
+            target_w, target_h = self.ov_w, self.ov_h
+        else:
+            target_w, target_h = self.DETECTION_SIZE
 
         while self.is_running:
             now  = time.time()
@@ -449,7 +475,6 @@ class OpenVINOFaceCounter:
                 time.sleep(wait)
                 continue
 
-            # Ambil frame terbaru (non-blocking)
             with self._frame_lock:
                 frame = self._latest_frame
             if frame is None:
@@ -458,23 +483,36 @@ class OpenVINOFaceCounter:
 
             t0 = time.time()
 
-            det_frame = cv2.resize(frame, (DW, DH), interpolation=cv2.INTER_LINEAR)
+            det_frame, scale, pad_x, pad_y = self._letterbox_resize(frame, target_w, target_h)
             raw_faces = (
                 self._detect_openvino(det_frame)
                 if self.use_openvino
                 else self._detect_haar(det_frame)
             )
 
+            # PATCH: deteksi crowd — kalau kandidat wajah di frame ini udah
+            # banyak, relax pengecekan frontal (eye-cascade) yang gak
+            # reliable buat wajah kecil/miring, biar gak makin nyaring
+            # wajah valid pas lagi rame.
+            is_crowd = len(raw_faces) >= self.CROWD_FACE_COUNT
+
             validated = []
             for face in raw_faces:
                 bx, by, bw, bh = face['box']
-                sx = int(bx * scale_x)
-                sy = int(by * scale_y)
-                sw = int(bw * scale_x)
-                sh = int(bh * scale_y)
 
-                # Guard: pastikan box dalam batas frame
-                if sx < 0 or sy < 0 or sx + sw > FW or sy + sh > FH:
+                # Map balik dari koordinat letterbox ke koordinat frame asli
+                sx = int((bx - pad_x) / scale)
+                sy = int((by - pad_y) / scale)
+                sw = int(bw / scale)
+                sh = int(bh / scale)
+
+                # Clamp ke batas frame (bukan cuma reject) — letterbox bisa
+                # bikin box nyenggol tepi karena pembulatan
+                sx = max(0, sx)
+                sy = max(0, sy)
+                sw = min(sw, FW - sx)
+                sh = min(sh, FH - sy)
+                if sw <= 0 or sh <= 0:
                     continue
 
                 roi = frame[sy:sy + sh, sx:sx + sw]
@@ -485,8 +523,8 @@ class OpenVINOFaceCounter:
                 if blur < self.BLUR_THRESH:
                     continue
 
-                # Frontal check hanya untuk deteksi dengan confidence rendah (hemat CPU)
-                if face.get('confidence', 0) < 0.70:
+                # Frontal check di-skip total kalau lagi crowd
+                if not is_crowd and face.get('confidence', 0) < 0.70:
                     if not self._is_frontal(frame, [sx, sy, sw, sh]):
                         continue
 
@@ -521,7 +559,6 @@ class OpenVINOFaceCounter:
             frame, faces, ts = result
 
             if ts == last_result_ts:
-                # Result belum berubah — render frame terbaru dengan tracker lama
                 with self._frame_lock:
                     display_frame = self._latest_frame
                 if display_frame is not None:
@@ -535,14 +572,12 @@ class OpenVINOFaceCounter:
                 self._redraw_trackers(frame)
                 self.frame = frame
 
-            # Update stats
             now          = time.time()
             render_faces = [e for e in self.trackers.values()
                             if now - e.last_seen <= self.ID_TIMEOUT]
             self.current_faces = render_faces
             self.stats_manager.update(len(render_faces))
 
-            # Hitung FPS
             elapsed            = time.time() - self.last_frame_ts
             self.last_frame_ts = time.time()
             self.frame_times.append(elapsed)
@@ -570,10 +605,41 @@ class OpenVINOFaceCounter:
             self.stats_manager.save_statistics()
 
     # ─────────────────────────────────────────────────────────────────────
-    # TRACKER MATCHING — PATCH BARU: Hungarian (optimal assignment)
+    # RESIZE — PATCH BARU: letterbox (jaga rasio aspek)
+    # ─────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _letterbox_resize(frame: np.ndarray, target_w: int, target_h: int):
+        """
+        Resize frame ke (target_w, target_h) TANPA distorsi rasio aspek —
+        pakai padding hitam (letterbox), bukan stretch.
+
+        Return: (canvas, scale, pad_x, pad_y) — scale & pad dipakai buat
+        mapping koordinat box hasil deteksi balik ke frame asli.
+        """
+        h, w = frame.shape[:2]
+        scale = min(target_w / w, target_h / h)
+        new_w, new_h = int(round(w * scale)), int(round(h * scale))
+
+        resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+
+        canvas = np.zeros((target_h, target_w, 3), dtype=np.uint8)
+        pad_x = (target_w - new_w) // 2
+        pad_y = (target_h - new_h) // 2
+        canvas[pad_y:pad_y + new_h, pad_x:pad_x + new_w] = resized
+
+        return canvas, scale, pad_x, pad_y
+
+    # ─────────────────────────────────────────────────────────────────────
+    # TRACKER MATCHING — Hungarian (optimal assignment)
     # ─────────────────────────────────────────────────────────────────────
 
     def _match_detections_to_trackers(self, faces: list, tracker_ids: list):
+        """
+        Optimal assignment antara deteksi baru dan tracker yang sudah ada,
+        pakai Hungarian algorithm — ganti greedy nearest-match lama yang
+        gampang salah assign pas banyak orang berdekatan.
+        """
         n_faces = len(faces)
 
         if n_faces == 0:
@@ -585,8 +651,6 @@ class OpenVINOFaceCounter:
             return self._match_detections_greedy(faces, tracker_ids)
 
         n_trackers = len(tracker_ids)
-        # Cost tinggi (jauh di atas MAX_POSITION_DIST) buat pasangan yang
-        # gak mungkin match — biar solver gak maksa pasangin yang jauh.
         cost = np.full((n_faces, n_trackers), self.MAX_POSITION_DIST * 50.0, dtype=np.float64)
 
         for fi, face in enumerate(faces):
@@ -618,7 +682,7 @@ class OpenVINOFaceCounter:
         return matches, unmatched_faces
 
     def _match_detections_greedy(self, faces: list, tracker_ids: list):
-        """Fallback kalau scipy gak ke-install — perilaku sama seperti kode lama."""
+        """Fallback kalau scipy gak ke-install."""
         matches: dict = {}
         used_tids = set()
 
@@ -664,7 +728,7 @@ class OpenVINOFaceCounter:
             self.trackers[fid].status = FaceStatus.LOST
             del self.trackers[fid]
 
-        # 2) Optimal assignment (Hungarian) — ganti greedy loop lama
+        # 2) Optimal assignment (Hungarian)
         tracker_ids = list(self.trackers.keys())
         matches, unmatched_faces = self._match_detections_to_trackers(faces, tracker_ids)
 
@@ -685,12 +749,6 @@ class OpenVINOFaceCounter:
                 self.next_id += 1
 
                 # ── RAW DETECTION COUNTING ──────────────────────
-                # Tracker baru = AI baru pertama kali mendeteksi objek ini
-                # (status masih DETECTED, belum lewat VERIFYING/embedding
-                # sama sekali). Langsung dihitung + dicatat ke DB di sini.
-                # Ini TERPISAH TOTAL dari pipeline verifikasi/dedup wajah
-                # unik yang ada di langkah (5) di bawah — pipeline itu
-                # TIDAK diubah dan tetap jalan seperti kode original.
                 self.stats_manager.add_raw_detection()
                 self.face_db.log_raw_detection(entry.face_id, self.cam_id)
 
@@ -711,7 +769,7 @@ class OpenVINOFaceCounter:
                     entry.embedding     = emb
                     entry.last_embed_ts = now
 
-            # 5) Database logic — anti-duplicate (logika TIDAK DIUBAH)
+            # 5) Database logic — anti-duplicate
             if entry.status == FaceStatus.VERIFYING and entry.is_verified():
                 if self.use_embeddings and entry.embedding is not None:
                     db_id, similarity = self.face_db.find_matching_face(entry.embedding)
@@ -745,12 +803,14 @@ class OpenVINOFaceCounter:
         try:
             h, w = det_frame.shape[:2]
 
+            # PATCH: det_frame sekarang sudah pas ukuran ov_w x ov_h dari
+            # letterbox di _detection_loop, jadi resize ini praktis no-op
+            # (dipertahankan sebagai safety net kalau ada mismatch).
             inp = (cv2.resize(det_frame, (self.ov_w, self.ov_h),
                               interpolation=cv2.INTER_LINEAR)
                    if h != self.ov_h or w != self.ov_w
                    else det_frame)
 
-            # Reuse buffer — hindari alokasi np.array baru setiap frame
             if self._ov_input_buf is None:
                 self._ov_input_buf = np.empty(
                     (1, self.ov_c, self.ov_h, self.ov_w), dtype=np.float32)
@@ -859,6 +919,10 @@ class OpenVINOFaceCounter:
           1. Aspect ratio
           2. Eye detection + symmetry
           3. Frontal cascade confirmation
+
+        Catatan: sekarang di-skip total kalau _detection_loop mendeteksi
+        crowd (lihat CROWD_FACE_COUNT) — fungsi ini gak reliable buat
+        wajah kecil/miring khas kerumunan, daripada nyaring wajah valid.
         """
         x, y, w, h = box
         if x < 0 or y < 0 or x + w > frame.shape[1] or y + h > frame.shape[0]:
@@ -872,12 +936,10 @@ class OpenVINOFaceCounter:
             score     = 0.0
             max_score = 3.5
 
-            # 1. Aspect ratio
             ar = w / float(h)
             if 0.75 < ar < 1.25:
                 score += 1.0
 
-            # 2. Eye detection + symmetry
             if self.eye_cascade is not None:
                 eyes = self.eye_cascade.detectMultiScale(
                     gray, scaleFactor=1.1, minNeighbors=3,
@@ -901,7 +963,6 @@ class OpenVINOFaceCounter:
                     if abs(eye_mid_x - face_mid_x) < w * 0.20:
                         score += 0.5
 
-            # 3. Frontal cascade
             if self.frontal_cascade is not None:
                 ff = self.frontal_cascade.detectMultiScale(
                     gray, scaleFactor=1.05, minNeighbors=3)
@@ -960,7 +1021,6 @@ class OpenVINOFaceCounter:
         corner_len = max(12, min(w // 4, 30))
         thickness  = 2
 
-        # Corner bracket box
         cv2.line(frame, (x, y),         (x + corner_len, y),         color, thickness)
         cv2.line(frame, (x, y),         (x, y + corner_len),         color, thickness)
         cv2.line(frame, (x + w, y),     (x + w - corner_len, y),     color, thickness)
@@ -970,7 +1030,6 @@ class OpenVINOFaceCounter:
         cv2.line(frame, (x + w, y + h), (x + w - corner_len, y + h), color, thickness)
         cv2.line(frame, (x + w, y + h), (x + w, y + h - corner_len), color, thickness)
 
-        # Label
         label       = f"#{entry.face_id} {status.value}"
         (lw, lh), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
         ly          = max(lh + 8, y)
@@ -978,7 +1037,6 @@ class OpenVINOFaceCounter:
         cv2.putText(frame, label, (x + 4, ly - 2),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 0), 1, cv2.LINE_AA)
 
-        # Blur quality bar
         bar_y = y + h + 3
         if bar_y + 4 < frame.shape[0]:
             bar_fill = int(w * min(1.0, entry.avg_blur() / 250))
@@ -994,21 +1052,25 @@ class OpenVINOFaceCounter:
     # ─────────────────────────────────────────────────────────────────────
 
     def _build_cam_stats_path(self) -> str:
-        """
-        Bikin path file statistik yang unik per kamera, diturunkan dari
-        Config.STATS_FILE dasar. Contoh:
-        'data/face_counter_stats.pkl' -> 'data/face_counter_stats_cam0.pkl'
-        """
         base_path = getattr(self.config, 'STATS_FILE', 'data/face_counter_stats.pkl')
         root, ext = os.path.splitext(base_path)
         return f"{root}_cam{self.cam_id}{ext}"
 
     def _reconnect(self):
+        """
+        PATCH: sekarang di-guard self._cap_lock supaya capture_loop dan
+        watchdog_loop gak rebutan akses self.cap secara bersamaan (bisa
+        dipanggil dari dua thread berbeda sekarang).
+        """
         print("⚠️  Stream lost — reconnecting...")
-        if self.cap:
-            self.cap.release()
-        time.sleep(2)
-        self.cap = self.video_handler.connect()
+        with self._cap_lock:
+            if self.cap:
+                try:
+                    self.cap.release()
+                except Exception:
+                    pass
+            time.sleep(2)
+            self.cap = self.video_handler.connect()
 
     def get_frame(self) -> np.ndarray:
         if self.frame is None:
@@ -1031,7 +1093,7 @@ class OpenVINOFaceCounter:
             'processing_fps':     round(self.processing_fps, 1),
             'active_trackers':    len(self.trackers),
             'current_faces':      len(self.current_faces),
-            'timestamp':          now_wita_iso(),  # TZ FIX — sebelumnya datetime.now().isoformat() (naive)
+            'timestamp':          now_wita_iso(),
             'detection_method':   self.detector_type,
             'embedding_tracking': self.use_embeddings,
             'database_size':      len(self.face_db.faces),
