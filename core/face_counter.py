@@ -34,6 +34,17 @@ except ImportError:
     FACENET_AVAILABLE = False
     print("⚠️  FaceNet not available, position-based tracking only")
 
+# ─────────────────────────────────────────────
+# SCIPY (Hungarian algorithm) — PATCH BARU
+# ─────────────────────────────────────────────
+try:
+    from scipy.optimize import linear_sum_assignment
+    HUNGARIAN_AVAILABLE = True
+    print("✅ Hungarian matching (scipy) available")
+except ImportError:
+    HUNGARIAN_AVAILABLE = False
+    print("⚠️  scipy tidak ada, fallback ke greedy matching (kurang akurat pas crowd)")
+
 from utils.face_database import FaceDatabase
 from utils.video_utils import VideoStreamHandler
 from utils.stats_manager import StatisticsManager
@@ -44,8 +55,8 @@ from utils.stats_manager import StatisticsManager
 # ─────────────────────────────────────────────────────────────────────────────
 
 class FaceStatus(Enum):
-    DETECTED         = "DETECTED"          # Frame 1–5   : baru muncul, belum diverifikasi
-    VERIFYING        = "VERIFYING"         # Frame 6–15  : sedang dievaluasi
+    DETECTED         = "DETECTED"          # Frame 1–2   : baru muncul, belum diverifikasi
+    VERIFYING        = "VERIFYING"         # Frame 3–4   : sedang dievaluasi
     WAJAH_BARU       = "WAJAH_BARU"        # Match DB: tidak ada  → disimpan ke database
     SUDAH_TERDETEKSI = "SUDAH_TERDETEKSI"  # Match DB: ada        → tidak disimpan lagi
     TRACKING         = "TRACKING"          # Sedang dilacak setelah diverifikasi
@@ -89,7 +100,14 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 class TrackerEntry:
     """Menyimpan state satu wajah yang sedang dilacak."""
 
-    VERIFY_FRAME_THRESHOLD = 10  # frame minimum sebelum status berubah dari VERIFYING
+    # PATCH: 10 -> 4. Di DETECTION_FPS=5, threshold lama (10) butuh wajah
+    # ke-track terus-menerus selama 2 detik penuh dengan ID yang sama
+    # sebelum boleh lolos verifikasi. Orang jalan normal di CCTV biasanya
+    # cuma "kelihatan jelas" 0.8–1.5 detik sebelum keluar frame/berpapasan
+    # dengan orang lain, jadi threshold lama nyaring habis mayoritas orang
+    # yang lewat — apalagi pas rame (5-10 orang bareng), makin dikit yang
+    # sempat nyampe 10 frame utuh tanpa ID-nya ketuker.
+    VERIFY_FRAME_THRESHOLD = 4  # frame minimum sebelum status berubah dari VERIFYING
 
     def __init__(self, face_id: int, cx: int, cy: int, ts: float):
         self.face_id       = face_id
@@ -113,7 +131,7 @@ class TrackerEntry:
 
     def advance_status(self):
         """Transisi state berdasarkan frame_count."""
-        if self.status == FaceStatus.DETECTED and self.frame_count >= 5:
+        if self.status == FaceStatus.DETECTED and self.frame_count >= 2:
             self.status = FaceStatus.VERIFYING
 
     def avg_quality(self) -> float:
@@ -123,11 +141,21 @@ class TrackerEntry:
         return float(np.mean(self.blur_hist)) if self.blur_hist else 0.0
 
     def is_verified(self) -> bool:
-        """Wajah dianggap layak diverifikasi ke database."""
+        """
+        Wajah dianggap layak diverifikasi ke database.
+
+        PATCH: syarat avg_blur() diturunkan dari 80 -> 40. Sebelumnya ada
+        gap aneh: syarat MASUK jadi kandidat cuma butuh blur > BLUR_THRESH
+        (30), tapi syarat LOLOS verifikasi butuh rata-rata blur > 80 —
+        2.6x lebih ketat. Orang jalan pasti ada motion blur, jadi rata-rata
+        blur score-nya jarang nembus 80 walau kualitas gambarnya sebenarnya
+        cukup buat dikenali. Sekarang diselaraskan (40 = sedikit di atas
+        syarat masuk, bukan jauh di atasnya).
+        """
         return (
             self.frame_count >= self.VERIFY_FRAME_THRESHOLD
             and self.avg_quality() > 0.60
-            and self.avg_blur() > 80
+            and self.avg_blur() > 40
         )
 
 
@@ -136,21 +164,7 @@ class TrackerEntry:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class OpenVINOFaceCounter:
-    """
-    Surveillance-grade face counter dengan:
-    - OpenVINO face-detection-adas-0001 (optimal untuk CCTV jarak jauh)
-    - FaceNet embedding (throttled: 1x per 2 detik per wajah)
-    - State machine FaceStatus
-    - Blur filter (Laplacian variance)
-    - Frontal face validator (aspect ratio + eye symmetry)
-    - Anti-duplicate database logic (similarity threshold 0.72)
-    - Detection 640x640 (penting untuk wajah kecil di 8 meter)
-    - Atomic frame slot (bukan queue) untuk latency rendah
-    - RAW DETECTION COUNTING (baru): tiap tracker baru (status DETECTED)
-      langsung dihitung + dicatat ke raw_detections table, TERPISAH dari
-      pipeline verifikasi/dedup wajah unik di bawahnya yang tetap jalan
-      seperti biasa.
-    """
+
 
     # ─── TUNABLE CONSTANTS ───────────────────────────────────────────────
     DETECTION_FPS     = 5           # OpenVINO inference rate (dinaikkan dari 3)
@@ -249,6 +263,7 @@ class OpenVINOFaceCounter:
         print(f"   Embeddings    : {'ON' if self.use_embeddings else 'OFF'}")
         print(f"   Blur Filter   : ON (threshold={self.BLUR_THRESH})")
         print(f"   Frontal Only  : ON")
+        print(f"   Matching      : {'Hungarian (optimal)' if HUNGARIAN_AVAILABLE else 'Greedy (fallback)'}")
 
     # ─────────────────────────────────────────────────────────────────────
     # INITIALIZERS
@@ -547,20 +562,6 @@ class OpenVINOFaceCounter:
                 self._draw_detection(frame, entry.last_box, entry)
 
     def _cleanup_loop(self):
-        """
-        Simpan database + statistik secara periodik.
-
-        PENTING: sebelumnya cuma face_db yang di-save periodik di sini;
-        stats_manager (daily_total, max_count, hourly_stats, dst) cuma
-        ke-flush ke disk pas stop() dipanggil secara GRACEFUL (SIGINT/
-        SIGTERM). Kalau proses mati paksa (SIGKILL, OOM-killer, listrik
-        mati, crash) — semua statistik hari itu hilang total karena belum
-        sempat ke-flush ke disk sama sekali.
-
-        Sekarang stats_manager ikut di-save tiap CLEANUP_INTERVAL detik
-        (default 300s), jadi kalaupun crash mendadak, yang paling banter
-        hilang cuma beberapa menit terakhir — bukan seluruh data hari itu.
-        """
         interval = getattr(self.config, 'CLEANUP_INTERVAL', 300)
         while self.is_running:
             time.sleep(interval)
@@ -569,24 +570,93 @@ class OpenVINOFaceCounter:
             self.stats_manager.save_statistics()
 
     # ─────────────────────────────────────────────────────────────────────
+    # TRACKER MATCHING — PATCH BARU: Hungarian (optimal assignment)
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _match_detections_to_trackers(self, faces: list, tracker_ids: list):
+        n_faces = len(faces)
+
+        if n_faces == 0:
+            return {}, []
+        if not tracker_ids:
+            return {}, list(range(n_faces))
+
+        if not HUNGARIAN_AVAILABLE:
+            return self._match_detections_greedy(faces, tracker_ids)
+
+        n_trackers = len(tracker_ids)
+        # Cost tinggi (jauh di atas MAX_POSITION_DIST) buat pasangan yang
+        # gak mungkin match — biar solver gak maksa pasangin yang jauh.
+        cost = np.full((n_faces, n_trackers), self.MAX_POSITION_DIST * 50.0, dtype=np.float64)
+
+        for fi, face in enumerate(faces):
+            x, y, w, h = face['box']
+            cx = x + w // 2
+            cy = y + h // 2
+            for ti, tid in enumerate(tracker_ids):
+                entry    = self.trackers[tid]
+                pos_dist = float(np.hypot(cx - entry.cx, cy - entry.cy))
+                emb_sim  = 0.0
+                if face.get('embedding') is not None and entry.embedding is not None:
+                    emb_sim = cosine_similarity(face['embedding'], entry.embedding)
+
+                score = (pos_dist * (1.0 - emb_sim)
+                         if self.use_embeddings and emb_sim > self.EMBED_SIM_THRESH
+                         else pos_dist)
+                cost[fi, ti] = score
+
+        row_ind, col_ind = linear_sum_assignment(cost)
+
+        matches: dict = {}
+        matched_faces = set()
+        for fi, ti in zip(row_ind, col_ind):
+            if cost[fi, ti] < self.MAX_POSITION_DIST:
+                matches[int(fi)] = tracker_ids[int(ti)]
+                matched_faces.add(int(fi))
+
+        unmatched_faces = [fi for fi in range(n_faces) if fi not in matched_faces]
+        return matches, unmatched_faces
+
+    def _match_detections_greedy(self, faces: list, tracker_ids: list):
+        """Fallback kalau scipy gak ke-install — perilaku sama seperti kode lama."""
+        matches: dict = {}
+        used_tids = set()
+
+        for fi, face in enumerate(faces):
+            x, y, w, h = face['box']
+            cx = x + w // 2
+            cy = y + h // 2
+
+            best_tid   = None
+            best_score = float('inf')
+
+            for tid in tracker_ids:
+                if tid in used_tids:
+                    continue
+                entry    = self.trackers[tid]
+                pos_dist = np.hypot(cx - entry.cx, cy - entry.cy)
+                emb_sim  = 0.0
+                if face.get('embedding') is not None and entry.embedding is not None:
+                    emb_sim = cosine_similarity(face['embedding'], entry.embedding)
+                score = (pos_dist * (1.0 - emb_sim)
+                         if self.use_embeddings and emb_sim > self.EMBED_SIM_THRESH
+                         else pos_dist)
+                if score < best_score:
+                    best_score = score
+                    best_tid   = tid
+
+            if best_tid is not None and best_score < self.MAX_POSITION_DIST:
+                matches[fi] = best_tid
+                used_tids.add(best_tid)
+
+        unmatched_faces = [fi for fi in range(len(faces)) if fi not in matches]
+        return matches, unmatched_faces
+
+    # ─────────────────────────────────────────────────────────────────────
     # TRACKER UPDATE — core logic
     # ─────────────────────────────────────────────────────────────────────
 
     def _update_trackers(self, frame: np.ndarray, faces: list, now: float):
-        """
-        Match detections ke tracker yang ada.
-        Update state machine, throttle embedding, anti-duplicate DB write.
-
-        RAW DETECTION COUNTING (baru): begitu tracker BARU dibuat (artinya
-        AI baru pertama kali "melihat" objek ini, status DETECTED), langsung
-        dihitung ke stats_manager.add_raw_detection() dan dicatat ke
-        face_db.log_raw_detection() — SEBELUM verifikasi/embedding apapun.
-
-        Pipeline verifikasi asli (VERIFYING → embedding → WAJAH_BARU /
-        SUDAH_TERDETEKSI → dedup ke tabel `faces`) TIDAK diubah sama sekali,
-        tetap jalan persis seperti sebelumnya, dan berjalan independen dari
-        raw detection counting di atas.
-        """
         # 1) Hapus tracker yang sudah timeout
         stale = [fid for fid, e in self.trackers.items()
                  if now - e.last_seen > self.ID_TIMEOUT]
@@ -594,9 +664,11 @@ class OpenVINOFaceCounter:
             self.trackers[fid].status = FaceStatus.LOST
             del self.trackers[fid]
 
-        used_ids = set()
+        # 2) Optimal assignment (Hungarian) — ganti greedy loop lama
+        tracker_ids = list(self.trackers.keys())
+        matches, unmatched_faces = self._match_detections_to_trackers(faces, tracker_ids)
 
-        for face in faces:
+        for face_idx, face in enumerate(faces):
             box        = face['box']
             x, y, w, h = box
             cx         = x + w // 2
@@ -604,36 +676,15 @@ class OpenVINOFaceCounter:
             quality    = face.get('quality',    0.0)
             blur       = face.get('blur',       0.0)
 
-            # 2) Match ke tracker yang sudah ada
-            best_id    = None
-            best_score = float('inf')
-
-            for fid, entry in self.trackers.items():
-                if fid in used_ids:
-                    continue
-                pos_dist = np.hypot(cx - entry.cx, cy - entry.cy)
-                emb_sim  = 0.0
-
-                if face.get('embedding') is not None and entry.embedding is not None:
-                    emb_sim = cosine_similarity(face['embedding'], entry.embedding)
-
-                score = (pos_dist * (1.0 - emb_sim)
-                         if self.use_embeddings and emb_sim > self.EMBED_SIM_THRESH
-                         else pos_dist)
-
-                if score < best_score:
-                    best_score = score
-                    best_id    = fid
-
             # 3) Assign ke tracker lama atau buat baru
-            if best_id is not None and best_score < self.MAX_POSITION_DIST:
-                entry = self.trackers[best_id]
+            if face_idx in matches:
+                entry = self.trackers[matches[face_idx]]
             else:
                 entry = TrackerEntry(self.next_id, cx, cy, now)
                 self.trackers[self.next_id] = entry
                 self.next_id += 1
 
-                # ── RAW DETECTION COUNTING (BARU) ──────────────────────
+                # ── RAW DETECTION COUNTING ──────────────────────
                 # Tracker baru = AI baru pertama kali mendeteksi objek ini
                 # (status masih DETECTED, belum lewat VERIFYING/embedding
                 # sama sekali). Langsung dihitung + dicatat ke DB di sini.
@@ -649,7 +700,6 @@ class OpenVINOFaceCounter:
             entry.advance_status()
             entry.last_box = box
             self.track_history[entry.face_id].append((float(cx), float(cy)))
-            used_ids.add(entry.face_id)
 
             # 4) Throttled embedding extraction
             if (self.use_embeddings
@@ -661,7 +711,7 @@ class OpenVINOFaceCounter:
                     entry.embedding     = emb
                     entry.last_embed_ts = now
 
-            # 5) Database logic — anti-duplicate (TIDAK DIUBAH — persis seperti sebelumnya)
+            # 5) Database logic — anti-duplicate (logika TIDAK DIUBAH)
             if entry.status == FaceStatus.VERIFYING and entry.is_verified():
                 if self.use_embeddings and entry.embedding is not None:
                     db_id, similarity = self.face_db.find_matching_face(entry.embedding)
