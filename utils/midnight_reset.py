@@ -165,6 +165,7 @@ class MidnightResetScheduler:
         # ── 1. Kumpulkan statistik ─────────────────────────────────────
         total_visitors   = 0
         max_concurrent   = 0
+        raw_detections   = 0  # BARU — total "terdeteksi manusia" (raw) hari ini, semua kamera
         detection_method = ""
         first_detection  = None
         last_detection   = None
@@ -174,6 +175,7 @@ class MidnightResetScheduler:
                 stats            = c.get_statistics()
                 total_visitors  += stats.get('daily_total',  0)
                 max_concurrent   = max(max_concurrent, stats.get('max_count', 0))
+                raw_detections  += stats.get('raw_detections', 0)
                 if not detection_method:
                     detection_method = stats.get('detection_method', '')
                 ts = stats.get('timestamp', '')
@@ -183,7 +185,8 @@ class MidnightResetScheduler:
             except Exception as e:
                 print(f"⚠️  stats error: {e}")
 
-        print(f"   📊 Snapshot {snap_date}: visitors={total_visitors}, max={max_concurrent}")
+        print(f"   📊 Snapshot {snap_date}: visitors={total_visitors}, max={max_concurrent}, "
+              f"raw_detections={raw_detections}")
 
         # ── 2. Simpan daily_summary ────────────────────────────────────
         try:
@@ -196,6 +199,7 @@ class MidnightResetScheduler:
             snapshot_date    = snap_date,
             total_visitors   = total_visitors,
             max_concurrent   = max_concurrent,
+            raw_detections   = raw_detections,
             session_count    = sc,
             first_detection  = first_detection,
             last_detection   = last_detection,
@@ -314,6 +318,7 @@ class MidnightResetScheduler:
 
         total_visitors   = 0
         max_concurrent   = 0
+        raw_detections   = 0  # BARU
         detection_method = ""
 
         for c in counters:
@@ -321,18 +326,21 @@ class MidnightResetScheduler:
                 stats            = c.get_statistics()
                 total_visitors  += stats.get('daily_total',  0)
                 max_concurrent   = max(max_concurrent, stats.get('max_count', 0))
+                raw_detections  += stats.get('raw_detections', 0)
                 if not detection_method:
                     detection_method = stats.get('detection_method', '')
                 c.stop()
             except Exception as e:
                 print(f"⚠️  shutdown stats error: {e}")
 
-        print(f"   📊 Shutdown snapshot: visitors={total_visitors}, max={max_concurrent}")
+        print(f"   📊 Shutdown snapshot: visitors={total_visitors}, max={max_concurrent}, "
+              f"raw_detections={raw_detections}")
 
         self._snapshot_db.save_daily_snapshot(
             snapshot_date    = today_str,
             total_visitors   = total_visitors,
             max_concurrent   = max_concurrent,
+            raw_detections   = raw_detections,
             detection_method = detection_method,
             notes            = notes,
         )

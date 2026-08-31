@@ -169,6 +169,10 @@ def auto_start_session():
                         snapshot_date  = carry['date'],
                         total_visitors = carry['total_detected'],
                         max_concurrent = carry['max_count'],
+                        # BARU: kalau stats_manager punya angka raw detection carryover-nya
+                        # ikut diselamatkan juga; kalau belum ada, default 0 (bukan hilang,
+                        # cuma gak ke-carry — angka utama tetap total_visitors/max_concurrent).
+                        raw_detections = carry.get('raw_detections', 0),
                         notes          = 'Auto-saved carryover (proses mati sebelum midnight reset)',
                     )
                     print(f"💾 Carryover {carry['date']} diselamatkan: "
@@ -190,6 +194,7 @@ def auto_start_session():
         stats          = _merged_stats()
         total_visitors = stats.get('daily_total', 0)
         max_concurrent = stats.get('max_count', 0)
+        raw_detections = stats.get('raw_detections', 0)  # BARU
 
         n_closed = mgr.end_all_running_sessions(
             total_visitors = total_visitors,
@@ -203,6 +208,7 @@ def auto_start_session():
                 snapshot_date  = today_wita(),
                 total_visitors = total_visitors,
                 max_concurrent = max_concurrent,
+                raw_detections = raw_detections,  # BARU
                 notes          = f'Auto-saved setelah restart/interrupt ({n_closed} sesi ditutup)',
             )
             print(f"💾 Data sesi yang ke-interrupt diselamatkan ke daily_snapshot: "
@@ -666,6 +672,8 @@ def export_daily_csv(date_str: str):
     if summary:
         writer.writerow(['Total Pengunjung', summary.get('total_visitors', 0)])
         writer.writerow(['Maks Bersamaan',   summary.get('max_concurrent', 0)])
+        # BARU: total "terdeteksi manusia" (raw, sebelum dedup) untuk tanggal ini
+        writer.writerow(['Total Terdeteksi Manusia', summary.get('raw_detections', 0)])
     writer.writerow([])
 
     writer.writerow(['No', 'Face ID', 'Pertama Terlihat', 'Terakhir Terlihat',
@@ -694,8 +702,9 @@ def export_daily_csv(date_str: str):
 # BEDA dengan /api/daily/export/<date_str> di atas:
 #   - endpoint di atas = detail per WAJAH untuk SATU tanggal
 #   - endpoint ini      = rekap TOTAL per tanggal untuk BANYAK tanggal sekaligus
-#     (format: tanggal sekian, jumlah pengunjung sekian), sesuai tampilan
-#     kartu-kartu di grid "Data Per Hari" pada halaman data-pengunjung.
+#     (format: tanggal sekian, jumlah pengunjung sekian, jumlah terdeteksi manusia
+#     sekian), sesuai tampilan kartu-kartu di grid "Data Per Hari" pada halaman
+#     data-pengunjung.
 # Query param opsional: ?start=YYYY-MM-DD&end=YYYY-MM-DD untuk export rentang
 # tanggal tertentu (dipakai bareng filter di UI). Kalau kosong -> export semua.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -722,25 +731,30 @@ def export_daily_summary_csv():
     writer.writerow(['Digenerate', now_wita().strftime('%Y-%m-%d %H:%M:%S WITA')])
     writer.writerow([])
 
+    # BARU: kolom "Total Terdeteksi Manusia" — breakdown raw detection per tanggal
     writer.writerow(['No', 'Tanggal', 'Total Pengunjung', 'Maks Bersamaan',
-                     'Metode Deteksi', 'Catatan'])
+                     'Total Terdeteksi Manusia', 'Metode Deteksi', 'Catatan'])
 
     sorted_summaries = sorted(summaries, key=lambda s: s.get('date', ''))
-    grand_total = 0
+    grand_total       = 0
+    grand_total_raw   = 0  # BARU
     for i, s in enumerate(sorted_summaries, 1):
-        grand_total += s.get('total_visitors', 0)
+        grand_total     += s.get('total_visitors', 0)
+        grand_total_raw += s.get('raw_detections', 0)
         writer.writerow([
             i,
             s.get('date', ''),
             s.get('total_visitors', 0),
             s.get('max_concurrent', 0),
+            s.get('raw_detections', 0),   # BARU
             s.get('detection_method', ''),
             s.get('notes', ''),
         ])
 
     writer.writerow([])
-    writer.writerow(['', 'TOTAL KESELURUHAN', grand_total, '', '', ''])
-    writer.writerow(['', 'JUMLAH HARI TERCATAT', len(sorted_summaries), '', '', ''])
+    writer.writerow(['', 'TOTAL KESELURUHAN (Pengunjung)',       grand_total,     '', '', '', ''])
+    writer.writerow(['', 'TOTAL KESELURUHAN (Terdeteksi Manusia)', grand_total_raw, '', '', '', ''])
+    writer.writerow(['', 'JUMLAH HARI TERCATAT', len(sorted_summaries), '', '', '', ''])
 
     if start and end:
         filename = f"rekap-pengunjung-{start}_sd_{end}.csv"
@@ -778,12 +792,14 @@ def manual_snapshot():
 
     total_visitors   = 0
     max_concurrent   = 0
+    total_raw        = 0  # BARU — total "terdeteksi manusia" hari ini, semua kamera
     detection_method = ""
 
     for c in counters_:
         stats            = c.get_statistics()
         total_visitors  += stats.get('daily_total', 0)
         max_concurrent   = max(max_concurrent, stats.get('max_count', 0))
+        total_raw       += stats.get('raw_detections', 0)
         if not detection_method:
             detection_method = stats.get('detection_method', '')
 
@@ -794,6 +810,7 @@ def manual_snapshot():
         snapshot_date    = today_str,
         total_visitors   = total_visitors,
         max_concurrent   = max_concurrent,
+        raw_detections   = total_raw,   # BARU
         detection_method = detection_method,
         notes            = notes,
     )
@@ -840,6 +857,7 @@ def manual_snapshot():
         'date':           today_str,
         'total_visitors': total_visitors,
         'max_concurrent': max_concurrent,
+        'raw_detections': total_raw,   # BARU
         'faces_logged':   n,
     })
     _broadcast_sse('counter_reset', {
@@ -856,6 +874,7 @@ def manual_snapshot():
         'date':           today_str,
         'total_visitors': total_visitors,
         'max_concurrent': max_concurrent,
+        'raw_detections': total_raw,   # BARU
         'faces_logged':   n,
     })
 
@@ -889,6 +908,7 @@ def toggle_detection():
                 snapshot_date  = today_wita(),
                 total_visitors = stats.get('daily_total', 0),
                 max_concurrent = stats.get('max_count', 0),
+                raw_detections = stats.get('raw_detections', 0),  # BARU
                 notes          = 'Detection manually stopped',
             )
             try:
@@ -899,7 +919,7 @@ def toggle_detection():
                 print(f"⚠️  toggle snapshot face log: {e}")
 
         current_session_active = False
-        session_start_time     = None
+        session_start_time = None
 
     _broadcast_sse('detection_toggled', {'enabled': detection_enabled})
     return jsonify({'success': True, 'detection_enabled': detection_enabled,

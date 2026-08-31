@@ -186,6 +186,7 @@
     .badge-green  { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
     .badge-blue   { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
     .badge-orange { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+    .badge-rose   { background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; }
     .badge-gray   { background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; }
     .badge-pulse  { animation: pulse 2s infinite; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.7} }
@@ -205,6 +206,7 @@
     .date-card .month   { font-size: .72rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; }
     .date-card .count   { font-family: 'JetBrains Mono', monospace; font-size: 1.2rem; font-weight: 700; color: #1e293b; }
     .date-card .count-label { font-size: .7rem; color: #94a3b8; }
+    .date-card .badge-row { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; justify-content: flex-end; }
 
     /* ── MODAL ── */
     .modal-overlay {
@@ -402,7 +404,7 @@
       <div class="flex items-center justify-between mb-4">
         <div>
           <p class="section-label">Trend</p>
-          <h2 style="font-size:1.1rem;font-weight:700;color:#1e293b;">Pengunjung 30 Hari Terakhir</h2>
+          <h2 style="font-size:1.1rem;font-weight:700;color:#1e293b;">Pengunjung vs Terdeteksi Manusia — 30 Hari Terakhir</h2>
         </div>
         <select id="chartRange" onchange="reloadChart()" style="font-size:.8rem;">
           <option value="30">30 hari</option>
@@ -498,7 +500,7 @@
         <h2 style="font-size:1.1rem;font-weight:700;color:#1e293b;">Data Per Hari</h2>
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <!-- TAMBAH: Export Rekap — total pengunjung per tanggal (semua hari, atau ikut filter aktif) -->
+        <!-- Export Rekap — total pengunjung + terdeteksi manusia per tanggal (semua hari, atau ikut filter aktif) -->
         <button onclick="exportSummaryCSV()" class="navbar-btn" style="font-size:.8rem;padding:8px 14px;background:linear-gradient(135deg,#8b5cf6,#7c3aed);box-shadow:0 2px 8px rgba(139,92,246,.3);">
           <svg width="15" height="15" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
           Export Rekap
@@ -526,7 +528,7 @@
             <button onclick="closeDateDetail()" style="padding:6px 14px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;font-size:.8rem;font-weight:600;cursor:pointer;color:#475569;">✕ Tutup</button>
           </div>
         </div>
-        <div id="dateDetailStats" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4"></div>
+        <div id="dateDetailStats" class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4"></div>
         <div class="tbl-wrap">
           <table>
             <thead>
@@ -857,8 +859,9 @@
           <div style="text-align:right;">
             <div class="count">${s.total_visitors}</div>
             <div class="count-label">pengunjung</div>
-            <div style="margin-top:4px;">
+            <div class="badge-row">
               <span class="badge badge-blue" style="font-size:.68rem;">Maks: ${s.max_concurrent}</span>
+              <span class="badge badge-rose" style="font-size:.68rem;">Deteksi: ${s.raw_detections ?? 0}</span>
             </div>
           </div>
         </div>`;
@@ -892,6 +895,10 @@
         <div class="stat-card" style="padding:14px;">
           <p class="section-label">Maks Bersamaan</p>
           <p class="stat-number" style="font-size:1.8rem;">${s.max_concurrent||0}</p>
+        </div>
+        <div class="stat-card" style="padding:14px;">
+          <p class="section-label">Terdeteksi Manusia</p>
+          <p class="stat-number" style="font-size:1.8rem;">${s.raw_detections ?? 0}</p>
         </div>
         <div class="stat-card" style="padding:14px;">
           <p class="section-label">Metode Deteksi</p>
@@ -985,15 +992,30 @@ function renderSessionsTable(sessions) {
   function initTrendChart() {
     trendChart = new Chart(document.getElementById('trendChart').getContext('2d'), {
       type: 'bar',
-      data: { labels: [], datasets: [{
-        data: [],
-        backgroundColor: 'rgba(59,130,246,0.15)',
-        borderColor: 'rgba(59,130,246,.8)',
-        borderWidth: 2, borderRadius: 8,
-      }]},
+      data: { labels: [], datasets: [
+        {
+          label: 'Pengunjung',
+          data: [],
+          backgroundColor: 'rgba(59,130,246,0.15)',
+          borderColor: 'rgba(59,130,246,.8)',
+          borderWidth: 2, borderRadius: 8,
+        },
+        {
+          label: 'Terdeteksi Manusia',
+          data: [],
+          backgroundColor: 'rgba(244,63,94,0.12)',
+          borderColor: 'rgba(244,63,94,.8)',
+          borderWidth: 2, borderRadius: 8,
+        },
+      ]},
       options: {
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
+        plugins: {
+          legend: {
+            display: true, position: 'top', align: 'end',
+            labels: { boxWidth: 10, boxHeight: 10, color: '#64748b', font: { size: 11 } },
+          },
+        },
         scales: {
           y: { beginAtZero: true, grid: { color: 'rgba(226,232,240,.8)' }, ticks: { color: '#94a3b8' } },
           x: { grid: { display: false }, ticks: { color: '#94a3b8', maxTicksLimit: 10 } },
@@ -1007,6 +1029,7 @@ function renderSessionsTable(sessions) {
     const sorted = [...summaries].reverse();
     trendChart.data.labels           = sorted.map(s => s.date.slice(5));
     trendChart.data.datasets[0].data = sorted.map(s => s.total_visitors);
+    trendChart.data.datasets[1].data = sorted.map(s => s.raw_detections ?? 0);
     trendChart.update();
   }
 
@@ -1038,6 +1061,7 @@ function renderSessionsTable(sessions) {
   function switchTab(tab) {
     currentTab = tab;
     document.getElementById('tabDaily')   .classList.toggle('active', tab==='daily');
+
     document.getElementById('tabSessions').classList.toggle('active', tab==='sessions');
     document.getElementById('panelDaily')   .classList.toggle('hidden', tab!=='daily');
     document.getElementById('panelSessions').classList.toggle('hidden', tab!=='sessions');
@@ -1054,7 +1078,7 @@ function renderSessionsTable(sessions) {
       });
       const d = await r.json();
       if (d.success) {
-        toast(`✅ Snapshot tersimpan: ${d.total_visitors} pengunjung, ${d.faces_logged} wajah`, 'success');
+        toast(`✅ Snapshot tersimpan: ${d.total_visitors} pengunjung, ${d.raw_detections ?? 0} terdeteksi, ${d.faces_logged} wajah`, 'success');
         // FIX: SSE 'snapshot_saved' otomatis trigger reload,
         // tapi fallback reload manual jika SSE lambat
         setTimeout(loadDaily, 1500);
@@ -1074,7 +1098,7 @@ function renderSessionsTable(sessions) {
     window.location.href = `/api/daily/export/${selectedDate}`;
   }
 
-  // TAMBAH: Export rekap total pengunjung per tanggal (bukan per-wajah).
+  // Export rekap total pengunjung + terdeteksi manusia per tanggal (bukan per-wajah).
   // Kalau filter tanggal (startDate/endDate) lagi diisi, rekap ikut dibatasi
   // ke rentang itu. Kalau kosong, export semua hari yang tercatat.
   function exportSummaryCSV() {
@@ -1085,7 +1109,7 @@ function renderSessionsTable(sessions) {
       url += `?start=${start}&end=${end}`;
     }
     window.location.href = url;
-    toast('📥 Mengunduh rekap pengunjung per hari...', 'info');
+    toast('📥 Mengunduh rekap pengunjung & deteksi per hari...', 'info');
   }
 
   async function deleteSession(id) {

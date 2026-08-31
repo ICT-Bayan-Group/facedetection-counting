@@ -27,6 +27,7 @@ class DailySnapshotDB:
                     date              TEXT PRIMARY KEY,   -- YYYY-MM-DD
                     total_visitors    INTEGER NOT NULL DEFAULT 0,
                     max_concurrent    INTEGER NOT NULL DEFAULT 0,
+                    raw_detections    INTEGER NOT NULL DEFAULT 0,  -- total "terdeteksi manusia" (raw) hari itu
                     session_count     INTEGER NOT NULL DEFAULT 0,
                     first_detection   TEXT,               -- ISO datetime
                     last_detection    TEXT,               -- ISO datetime
@@ -51,6 +52,14 @@ class DailySnapshotDB:
                 CREATE INDEX IF NOT EXISTS idx_ds_date  ON daily_summary(date);
             """)
 
+            # MIGRATION: DB lama (sebelum kolom raw_detections ada) —
+            # tambahkan kolomnya biar gak error di install existing.
+            cols = [row[1] for row in c.execute("PRAGMA table_info(daily_summary)").fetchall()]
+            if 'raw_detections' not in cols:
+                c.execute("ALTER TABLE daily_summary ADD COLUMN raw_detections INTEGER NOT NULL DEFAULT 0")
+                c.commit()
+                print("🔧 Migrasi DB: kolom raw_detections ditambahkan ke daily_summary")
+
     def _conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=15)
         conn.row_factory = sqlite3.Row
@@ -65,6 +74,7 @@ class DailySnapshotDB:
         snapshot_date:    str,          # "YYYY-MM-DD"
         total_visitors:   int,
         max_concurrent:   int,
+        raw_detections:   int           = 0,   # BARU — total "terdeteksi manusia" (raw, sebelum dedup) hari itu
         session_count:    int           = 0,
         first_detection:  Optional[str] = None,
         last_detection:   Optional[str] = None,
@@ -73,39 +83,43 @@ class DailySnapshotDB:
     ) -> bool:
         """
         INSERT OR REPLACE ringkasan harian.
-        Jika tanggal sudah ada, nilai total_visitors/max_concurrent diambil
-        yang LEBIH BESAR (supaya re-save tidak menghapus data lebih besar).
+        Jika tanggal sudah ada, nilai total_visitors/max_concurrent/raw_detections
+        diambil yang LEBIH BESAR (supaya re-save di hari yang sama tidak
+        menghapus/mengecilkan angka yang sudah lebih tinggi).
         """
         now = now_wita_iso()  # TZ FIX — sebelumnya datetime.now().isoformat() (naive)
         try:
             with self._lock:
                 with self._conn() as c:
                     existing = c.execute(
-                        "SELECT total_visitors, max_concurrent FROM daily_summary WHERE date=?",
+                        "SELECT total_visitors, max_concurrent, raw_detections "
+                        "FROM daily_summary WHERE date=?",
                         (snapshot_date,)
                     ).fetchone()
 
                     if existing:
                         tv = max(existing['total_visitors'], total_visitors)
                         mc = max(existing['max_concurrent'],  max_concurrent)
+                        rd = max(existing['raw_detections'] or 0, raw_detections or 0)
                         c.execute("""
                             UPDATE daily_summary
                                SET total_visitors  = ?,
                                    max_concurrent  = ?,
+                                   raw_detections  = ?,
                                    session_count   = ?,
                                    last_detection  = ?,
                                    detection_method= ?,
                                    notes           = ?
                              WHERE date = ?
-                        """, (tv, mc, session_count, last_detection or now,
+                        """, (tv, mc, rd, session_count, last_detection or now,
                               detection_method, notes, snapshot_date))
                     else:
                         c.execute("""
                             INSERT INTO daily_summary
-                              (date, total_visitors, max_concurrent, session_count,
+                              (date, total_visitors, max_concurrent, raw_detections, session_count,
                                first_detection, last_detection, detection_method, notes, created_at)
-                            VALUES (?,?,?,?,?,?,?,?,?)
-                        """, (snapshot_date, total_visitors, max_concurrent,
+                            VALUES (?,?,?,?,?,?,?,?,?,?)
+                        """, (snapshot_date, total_visitors, max_concurrent, raw_detections or 0,
                               session_count, first_detection or now,
                               last_detection or now, detection_method, notes, now))
                     c.commit()
@@ -202,6 +216,8 @@ class DailySnapshotDB:
                        SUM(total_visitors)    AS grand_total,
                        MAX(max_concurrent)    AS all_time_max,
                        AVG(total_visitors)    AS avg_per_day,
+                       SUM(raw_detections)    AS grand_total_raw_detections,
+                       AVG(raw_detections)    AS avg_raw_detections_per_day,
                        MIN(date)              AS oldest_date,
                        MAX(date)              AS newest_date
                   FROM daily_summary
